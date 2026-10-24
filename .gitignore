@@ -10,3 +10,4 @@ capturas/
 *.db
 CLAUDE.local.md
 .claude/settings.local.json
+experimentos/modelos/
