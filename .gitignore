@@ -1,0 +1,12 @@
+.env
+__pycache__/
+.venv/
+data/
+grabaciones/
+capturas/
+*.mp4
+*.avi
+*.sqlite
+*.db
+CLAUDE.local.md
+.claude/settings.local.json
