@@ -1,0 +1,8 @@
+# BioFocus: la app solo escucha en este equipo y no envía estadísticas de uso a Streamlit.
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+address = "localhost"
+port = 8501

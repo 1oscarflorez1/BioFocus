@@ -56,3 +56,10 @@ Fecha: 2026-10-29. La instrucción del Momento 2 es la tarea aprobada (`docs/PLA
 ## Trazas
 - `traces/AAAA-MM-DD.jsonl`, una línea por pregunta, con la pregunta, la respuesta, los tokens y los spans (orden, tipo y duración en ms). Están en `.gitignore`.
 - Guardan la pregunta, que no sale de la carpeta del proyecto. Nunca guardan la llave (hay prueba).
+
+## App
+- El selector de proveedor ofrece los perfiles de `.env` y los demás modelos verificados de esos proveedores, que usan la misma llave. El elegido pasa a ser el activo ("principal" para los interruptores) y el respaldo es el primer perfil de `.env` distinto.
+- El panel muestra los últimos 7 días, hoy incluido: barras horizontales de una sola serie, con tooltip, y una tabla con los mismos números.
+- `.streamlit/config.toml`: la app solo escucha en `localhost` y no envía estadísticas de uso a Streamlit.
+- El chat no acepta archivos ni audio.
+- Las preguntas de ejemplo son las tres de la instrucción, como botones, para la demo.
