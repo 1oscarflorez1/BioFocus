@@ -17,7 +17,8 @@ PENDIENTE
 ## Qué NO hacer
 
 - No leas, muestres ni hagas commit de .env ni de ninguna llave.
-- No guardes imágenes, video ni audio de la cámara o el micrófono, ni siquiera para depurar.
+- BioFocus nunca graba ni guarda imágenes, video o audio durante una sesión, ni siquiera para depurar.
+- Los videos de prueba los grabo yo, a propósito y fuera de BioFocus. Viven en grabaciones/, que git ignora, y el producto solo los lee para las pruebas de cámara y el plan B de la demo. Nunca se suben al repositorio.
 - No envíes imágenes ni audio a ningún modelo ni servicio externo.
 - No inventes diagnósticos ni recomendaciones de salud.
 - No instales dependencias sin preguntar.

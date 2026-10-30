@@ -11,6 +11,8 @@ Equipo de desarrollo y demo: Windows 11 Home, 23 GB de RAM, AMD Ryzen AI 5 340 (
 - Costo cero: capa gratuita sin tarjeta o modelo local.
 - Trabajo individual.
 - Demo en vivo de unos dos minutos, con plan B sin internet.
+- Plan B de cámara con video grabado: BioFocus lee un video de prueba de `grabaciones/` en vez de la cámara en vivo.
+  - Cambio: salió de "Fuera de alcance", donde lo bloqueaba la regla de no guardar video; en CLAUDE.md esa regla se dividió en dos: BioFocus nunca graba en una sesión, y los videos de prueba se graban fuera de BioFocus.
 - Alcance mínimo del Momento 1:
   - Check-in con la meta de la sesión.
   - Título de la ventana activa clasificado con reglas; un LLM decide solo lo ambiguo.
@@ -23,7 +25,6 @@ Equipo de desarrollo y demo: Windows 11 Home, 23 GB de RAM, AMD Ryzen AI 5 340 (
 - Parpadeo, bostezos, ojos cerrados, distancia a la pantalla y mirada al celular: no están en el mínimo; cada uno es otro detector con sus propios umbrales.
 - Aceleración con NPU o GPU: el volumen de procesamiento (~10 cuadros por segundo) no la necesita.
 - Interfaz web o Electron: más piezas y dos runtimes para un solo desarrollador; se reconsidera para el dashboard del Momento 3.
-- Plan B de cámara con video grabado: lo prohíbe la regla de no guardar video.
 
 ## Hay que probar o preguntar
 
@@ -52,7 +53,6 @@ Equipo de desarrollo y demo: Windows 11 Home, 23 GB de RAM, AMD Ryzen AI 5 340 (
 - Almacenamiento de eventos (SQLite o JSONL), retención y borrado.
 - Criterio de corte del alcance condicional.
 - Guion de la demo: cómo se provoca cada alerta en vivo.
-- Plan B de cámara: confiar en la cámara en vivo o reproducir puntos clave sintéticos.
 - Pruebas de postura sin imágenes (propuesta: puntos clave sintéticos).
 - Dependencias aprobadas: mediapipe, opencv-python, psutil, cliente de Ollama, notificaciones.
 

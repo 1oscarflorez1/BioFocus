@@ -3,6 +3,7 @@
   "permissions": {
     "allow": [
       "Bash(python -m pytest *)",
+      "PowerShell(python -m pytest *)",
       "Edit(/producto/**)"
     ],
     "ask": [
@@ -10,10 +11,16 @@
       "Bash(python -m pip install *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(rm *)"
+      "Bash(rm *)",
+      "PowerShell(pip install *)",
+      "PowerShell(python -m pip install *)",
+      "PowerShell(git commit *)",
+      "PowerShell(git push *)",
+      "PowerShell(Remove-Item *)"
     ],
     "deny": [
-      "Read(.env)"
+      "Read(.env)",
+      "PowerShell(Get-Content *.env)"
     ]
   }
 }
