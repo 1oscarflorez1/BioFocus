@@ -533,8 +533,9 @@ REGISTRO: dict[str, Herramienta] = {
                 "'distraccion', 'cansancio' o 'general'. Úsala cuando pidan una pausa o un descanso, y "
                 "recomienda solo lo que devuelva, con su aviso. No la uses para diagnosticar ni para "
                 "responder sobre dolor o síntomas: en ese caso sugiere consultar a un profesional de salud. "
-                "Prerrequisito: motivo exactamente uno de los cinco; si la pausa depende de sus datos (por "
-                "ejemplo, muchas alertas de postura), consulta primero esos datos."
+                "Prerrequisito: motivo exactamente uno de los cinco; si la persona no dice el motivo, usa "
+                "'general' sin preguntar; si la pausa depende de sus datos (por ejemplo, muchas alertas de "
+                "postura), consulta primero esos datos."
             ),
             parametros={
                 "type": "object",

@@ -8,7 +8,16 @@ Ninguna imagen ni audio se guarda ni sale del equipo.
 
 ## Cómo se corre
 
-PENDIENTE
+Desde la raíz, en PowerShell, con Python 3.13. Detalle en README.md.
+
+- Entorno: `python -m venv .venv` y `.venv\Scripts\python -m pip install streamlit` (la única dependencia; lo demás es librería estándar).
+- Llaves: copiar `.env.example` a `.env` y llenar `LLM_PROVIDER` y `LLM_API_KEY` (respaldo opcional con `LLM_FALLBACK_*`). Nunca leer ni mostrar `.env`.
+- Datos demo: `.venv\Scripts\python producto\generar_datos_demo.py` (7 días que terminan ayer, semilla 42, en `data/biofocus.sqlite`).
+- App: `.venv\Scripts\python -m streamlit run producto\app.py` (http://localhost:8501).
+- Consola: `.venv\Scripts\python producto\agente.py "¿a qué hora me distraigo más?"` (con `--traza` imprime el JSON).
+- Pruebas, sin red ni llaves: `.venv\Scripts\python -m unittest discover -s tests`.
+- Modelos con herramientas: `.venv\Scripts\python producto\verificar_modelos.py`.
+- Trazas: `traces/AAAA-MM-DD.jsonl` (git las ignora).
 
 ## Convenciones
 

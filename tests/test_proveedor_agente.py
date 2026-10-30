@@ -160,6 +160,20 @@ class TestProveedor(Base):
         self.assertFalse(r.ok)
         self.assertEqual(r.error, "timeout")
 
+    def test_gemini_recibe_firma_en_llamadas_de_otro_proveedor(self):
+        s = self.servidor([texto("ok")])
+        mensajes = [
+            {"role": "user", "content": "¿cuánto estudié?"},
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "resumen_sesiones", "arguments": "{}"}}]},
+            {"role": "tool", "tool_call_id": "c1", "content": "{}"},
+        ]
+        r = proveedor.llamar_llm(mensajes, None, perfiles=[s.perfiles[1]])  # el perfil de Gemini
+        self.assertTrue(r.ok)
+        enviada = s.pedidos[0]["messages"][1]["tool_calls"][0]
+        self.assertEqual(enviada["extra_content"]["google"]["thought_signature"], proveedor.FIRMA_FICTICIA_GEMINI)
+        self.assertNotIn("extra_content", mensajes[1]["tool_calls"][0])  # el historial original no cambia
+
     def test_la_llave_no_aparece_en_trazas(self):
         s = self.servidor([herramienta("resumen_sesiones", RANGO), texto("ok")])
         r = self.preguntar(s, forzar_429="principal")

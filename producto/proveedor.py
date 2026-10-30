@@ -206,6 +206,32 @@ def _post_con_limite(perfil: Perfil, cuerpo: dict, timeout_s: float) -> dict:
         raise _Fallo("timeout", f"sin respuesta en {timeout_s} s", perfil) from None
 
 
+# ---------------------------------------------------------------- compatibilidad entre proveedores
+
+# Gemini 3 exige una "thought_signature" en cada llamada a herramienta del historial. Las que generó otro
+# proveedor (por ejemplo, Groq antes de pasar al respaldo) no la traen y Gemini responde 400. Google
+# documenta este valor para historiales que vienen de otro modelo. Groq acepta el campo sin problema.
+FIRMA_FICTICIA_GEMINI = "skip_thought_signature_validator"
+
+
+def _adaptar(mensajes: list[dict], perfil: Perfil) -> list[dict]:
+    """Copia de los mensajes lista para este proveedor; no modifica el historial original."""
+    if perfil.proveedor != "gemini":
+        return mensajes
+    adaptados = []
+    for m in mensajes:
+        if m.get("role") == "assistant" and m.get("tool_calls"):
+            llamadas = []
+            for llamada in m["tool_calls"]:
+                firma = ((llamada.get("extra_content") or {}).get("google") or {}).get("thought_signature")
+                if not firma:
+                    llamada = {**llamada, "extra_content": {"google": {"thought_signature": FIRMA_FICTICIA_GEMINI}}}
+                llamadas.append(llamada)
+            m = {**m, "tool_calls": llamadas}
+        adaptados.append(m)
+    return adaptados
+
+
 # ---------------------------------------------------------------- interruptores
 
 
@@ -299,7 +325,7 @@ def llamar_llm(
                     if forzar_429:
                         span["forzado"] = "429"
                         raise _Fallo("429", "429 forzado por interruptor de prueba", perfil, 429)
-                    datos = _post_con_limite(perfil, {**cuerpo, "model": perfil.modelo}, timeout_s)
+                    datos = _post_con_limite(perfil, {**cuerpo, "model": perfil.modelo, "messages": _adaptar(mensajes, perfil)}, timeout_s)
                     try:
                         mensaje = datos["choices"][0]["message"]
                     except (KeyError, IndexError, TypeError):

@@ -63,3 +63,9 @@ Fecha: 2026-10-29. La instrucción del Momento 2 es la tarea aprobada (`docs/PLA
 - `.streamlit/config.toml`: la app solo escucha en `localhost` y no envía estadísticas de uso a Streamlit.
 - El chat no acepta archivos ni audio.
 - Las preguntas de ejemplo son las tres de la instrucción, como botones, para la demo.
+
+## Prueba de punta a punta (paso 7)
+- **Fallo encontrado y corregido:** en la tercera pregunta real, Groq respondió 429 de verdad por límite de la capa gratuita. El reintento y el cambio a Gemini funcionaron, pero Gemini rechazó el historial con un 400: Gemini 3 exige una `thought_signature` en las llamadas a herramienta, y las que generó Groq no la traen. Ahora, antes de enviar a Gemini, el proveedor agrega a esas llamadas el valor que Google documenta para historiales que vienen de otro modelo (`skip_thought_signature_validator`). Lo verifiqué contra la API real (sin la firma da 400; con ella responde) y hay una prueba de regresión. Groq acepta sin problema las llamadas con el campo de Gemini.
+- `pausas_recomendadas`: si la persona no dice el motivo, usa `general` en vez de preguntar (en una corrida, el modelo preguntaba).
+- El aviso del catálogo de pausas se agrega siempre a "Fuente y criterio", desde el código, porque el modelo a veces lo omitía.
+- `.env.example` documenta ahora `LLM_MODEL`, `LLM_FALLBACK_*` y `OFFLINE_MODE`.

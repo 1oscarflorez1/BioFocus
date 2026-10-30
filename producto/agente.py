@@ -139,6 +139,8 @@ def fuente_y_criterio(usadas: list[dict], demo: bool, pendiente: dict | None = N
         a = u["argumentos"]
         rango = f" del {a['desde']} al {a['hasta']}" if "desde" in a else ""
         lineas.append(f"- **{h.titulo}**{rango}: {u['resumen']}. Criterio: {h.criterio}.")
+        if u.get("aviso"):
+            lineas.append(f"- Aviso: {u['aviso']}")
     if pendiente:
         a = pendiente["argumentos"]
         lineas.append(f"- **Regla propuesta**: {a['app']} → {a['categoria']}. Criterio: solo se guarda si la apruebas.")
@@ -287,7 +289,12 @@ def responder(
                 estado.avisos.append(error)
                 mensajes.append(_mensaje_herramienta(llamada, {"error": error}))
                 continue
-            estado.usadas.append({"nombre": nombre, "argumentos": kwargs, "resumen": herramientas.resumir(nombre, resultado)})
+            estado.usadas.append({
+                "nombre": nombre,
+                "argumentos": kwargs,
+                "resumen": herramientas.resumir(nombre, resultado),
+                "aviso": resultado.get("aviso"),  # el del catálogo de pausas se muestra siempre
+            })
             estado.demo |= bool(resultado.get("datos_demo"))
             mensajes.append(_mensaje_herramienta(llamada, resultado))
         if hubo_invalida:
