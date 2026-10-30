@@ -1,0 +1,10 @@
+# Plan · Momento 2 · Coach de BioFocus
+Tarea aprobada por instrucción del 2026-10-29. Decisiones menores en `docs/decisiones/m2-decisiones.md`.
+
+1. Datos (`producto/datos.py`, `generar_datos_demo.py`). ¿`data/biofocus.sqlite` queda con 7 días demo (semilla 42), idéntica en dos corridas y sin columna para títulos?
+2. Herramientas (`producto/herramientas.py`, `catalogo_pausas.json`). ¿Las 6 responden con los datos demo, rechazan argumentos inválidos y `guardar_regla` no escribe sin aprobación? → commit y push
+3. Proveedor (`producto/proveedor.py`). ¿`llamar_llm` obtiene una llamada a herramienta del proveedor de `.env`, y los 429, timeout y salida inválida forzados terminan en reintento, respaldo o mensaje claro, nunca en un stack trace?
+4. Agente (`producto/agente.py`). ¿Responde con datos de las herramientas y cada límite (6 iteraciones, 12 000 tokens, aprobación, 20 s / 5 s) corta con un aviso en la respuesta? → commit y push
+5. Trazas (`producto/trazas.py`). ¿Cada pregunta deja sus spans en orden, con duración en ms, en `traces/AAAA-MM-DD.jsonl`, y git ignora `traces/`?
+6. App (`producto/app.py`, Streamlit en `.venv`). ¿En el navegador funcionan chat, "Fuente y criterio", traza, Aprobar/Rechazar, cambio de proveedor, interruptores y minutos por categoría? → commit y push
+7. Docs y prueba (`README.md`, "Cómo se corre"). ¿Otra persona puede correrlo con el README, y 3 preguntas reales responden con su traza? → commit y push

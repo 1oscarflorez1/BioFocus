@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "estado": "Borrador conservador del Momento 2. Revisarlo antes de usarlo con otras personas.",
+  "aviso": "Son sugerencias generales de pausa para quien estudia frente al computador, no un diagnóstico ni un tratamiento. Si sientes dolor, mareo u otra molestia que no se va, detente y consulta a un profesional de salud.",
+  "pausas": [
+    {
+      "id": "caminar",
+      "nombre": "Levantarse y caminar",
+      "motivos": ["postura", "cansancio", "distraccion", "general"],
+      "duracion_min": 3,
+      "pasos": ["Ponte de pie y camina a un ritmo cómodo.", "Vuelve a tu puesto cuando pase el tiempo."],
+      "precaucion": "A tu ritmo; si algo molesta, para."
+    },
+    {
+      "id": "revisar_puesto",
+      "nombre": "Revisar el puesto",
+      "motivos": ["postura"],
+      "duracion_min": 1,
+      "pasos": ["Apoya la espalda en el respaldo y los pies en el piso.", "Acomoda la pantalla para no tener que inclinar la cabeza para verla."],
+      "precaucion": "Es un ajuste del puesto, no un ejercicio."
+    },
+    {
+      "id": "hombros",
+      "nombre": "Mover los hombros",
+      "motivos": ["postura"],
+      "duracion_min": 1,
+      "pasos": ["Sube los hombros despacio y bájalos, 5 veces.", "Haz 5 círculos lentos hacia atrás."],
+      "precaucion": "Movimientos lentos; si duele, no sigas."
+    },
+    {
+      "id": "mirar_lejos",
+      "nombre": "Mirar a lo lejos",
+      "motivos": ["vista", "general"],
+      "duracion_min": 1,
+      "pasos": ["Aparta la vista de la pantalla y mira algo lejano, por ejemplo por una ventana, unos 20 segundos.", "Parpadea con calma antes de volver."],
+      "precaucion": "Si la molestia en los ojos sigue, consulta a un profesional de la visión."
+    },
+    {
+      "id": "respirar",
+      "nombre": "Respirar despacio",
+      "motivos": ["distraccion", "cansancio", "general"],
+      "duracion_min": 2,
+      "pasos": ["Siéntate cómodo y respira despacio unas 10 veces.", "Luego escribe en una línea qué sigue en tu meta."],
+      "precaucion": "Si te mareas, vuelve a respirar normal."
+    },
+    {
+      "id": "sin_pantallas",
+      "nombre": "Pausa sin pantallas",
+      "motivos": ["distraccion", "vista"],
+      "duracion_min": 5,
+      "pasos": ["Deja el celular lejos y aléjate de la pantalla.", "Al volver, abre solo lo que necesitas para la meta."],
+      "precaucion": "Ninguna."
+    },
+    {
+      "id": "agua",
+      "nombre": "Ir por agua",
+      "motivos": ["cansancio", "general"],
+      "duracion_min": 3,
+      "pasos": ["Levántate, sirve un vaso de agua y vuelve."],
+      "precaucion": "Ninguna."
+    }
+  ]
+}
