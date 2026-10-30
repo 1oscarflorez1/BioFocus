@@ -27,3 +27,32 @@ Fecha: 2026-10-29. La instrucción del Momento 2 es la tarea aprobada (`docs/PLA
 - `guardar_regla` solo acepta apps que ya aparecen en los datos y las categorías `sirve`, `no_sirve` o `neutro`. Escribe en `data/reglas.json`, que es un dato de la persona y git ignora. La función se niega a escribir sin `aprobado=True`, que solo pone la app tras el clic en Aprobar.
 - Los nombres de app se recortan a 40 caracteres y pierden los caracteres de control antes de llegar al modelo.
 - **Catálogo de pausas:** borrador conservador (caminar, revisar el puesto, mover los hombros, mirar a lo lejos, respirar, pausa sin pantallas, ir por agua). Cada pausa trae su precaución, y el catálogo trae el aviso de consultar a un profesional. No cita fuentes porque no las verifiqué: hay que revisarlo antes de usarlo con otras personas.
+
+## Proveedor
+- **User-Agent propio** (`BioFocus/0.2`): Cloudflare, delante de Groq, rechaza con 403 (error 1010) el User-Agent por defecto de urllib.
+- **Modelos verificados** con `producto/verificar_modelos.py` el 2026-10-29:
+  - Groq: `openai/gpt-oss-120b` (principal por defecto), `openai/gpt-oss-20b` (respaldo dentro de Groq) y `qwen/qwen3.8-27b`.
+  - Gemini: `gemini-3.5-flash` (por defecto), `gemini-3.5-flash-lite`, `gemini-flash-lite-latest` y `gemini-3.1-flash-lite`.
+  - Fallaron: `llama-3.3-70b-versatile` (Groq ya no lo lista), `gemini-2.5-flash` y `gemini-2.5-flash-lite` (404), y `gemini-flash-latest` y `gemini-3.8-flash` (más de 20 s).
+- El `.env` actual define Groq como principal y Gemini como respaldo (`LLM_FALLBACK_*`) sin fijar modelos, así que valen los de arriba.
+- Las variables `LLM_*` y `OFFLINE_MODE` del sistema tienen prioridad sobre `.env`, como en python-dotenv.
+- `OFFLINE_MODE=true` (ya estaba en `.env.example`) deja solo Ollama local.
+- **429:** esperas fijas de 1, 2 y 4 s, también en el respaldo. Se ignora `Retry-After`. Si todo se agota, mensaje honesto y la sesión sigue.
+- **Respaldo pegajoso dentro de una pregunta:** después de cambiar al respaldo, las demás llamadas de esa pregunta van directo a él. Si no, cada llamada esperaría 7 s más. La pregunta siguiente vuelve a empezar por el perfil activo.
+- **Timeout:** límite total de 20 s por llamada, con un hilo aparte, porque urllib solo mide cada operación de red. No pasa al respaldo: corta y lo dice.
+- **Otros errores** (llave rechazada, 5xx, red caída, modelo inexistente): pasan al respaldo sin esperar.
+- **Salida inválida:** el interruptor reemplaza los argumentos de la primera llamada a herramienta por `{"desde": "la semana pasada", "hasta": "hoy"}`. La validación y el reintento viven en el agente, que es donde se validan los argumentos. El 400 `tool_use_failed` de Groq cuenta como salida inválida.
+- **Interruptores:** 429 (no, principal o todos), timeout (sí o no) y salida inválida (no, una vez o siempre). "Principal" es el perfil activo. Los casos forzados no salen a la red.
+
+## Agente
+- Si la salida es inválida por segunda vez, responde con un texto fijo, sin otra llamada al LLM, para no contestar sin datos. El fallo queda en la traza (`fallo: salida_invalida`) y en el log.
+- Tokens: suma lo que informa el proveedor en `usage`. Antes de cada llamada estima el siguiente envío (3,5 caracteres por token) para no pasarse de 12 000.
+- La aprobación pausa el bucle: `guardar_regla` no se ejecuta y la respuesta trae la propuesta. La app llama a `resolver_aprobacion` con el clic en Aprobar o Rechazar, y después no hay otra llamada al LLM.
+- Los avisos de límite (por ejemplo, el timeout de una herramienta) se agregan al final de la respuesta.
+- Historial: se reenvían las últimas 2 preguntas y respuestas, solo el texto.
+- "Fuente y criterio" la arma el código desde lo que pasó en la pregunta, no el LLM. Si no se consultó ninguna herramienta, lo dice.
+- Si la pregunta no dice el periodo, se usan los últimos 7 días y la respuesta lo dice.
+
+## Trazas
+- `traces/AAAA-MM-DD.jsonl`, una línea por pregunta, con la pregunta, la respuesta, los tokens y los spans (orden, tipo y duración en ms). Están en `.gitignore`.
+- Guardan la pregunta, que no sale de la carpeta del proyecto. Nunca guardan la llave (hay prueba).

@@ -11,3 +11,4 @@ capturas/
 CLAUDE.local.md
 .claude/settings.local.json
 experimentos/modelos/
+traces/
