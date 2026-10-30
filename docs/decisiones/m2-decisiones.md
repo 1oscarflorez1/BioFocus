@@ -69,3 +69,14 @@ Fecha: 2026-10-29. La instrucción del Momento 2 es la tarea aprobada (`docs/PLA
 - `pausas_recomendadas`: si la persona no dice el motivo, usa `general` en vez de preguntar (en una corrida, el modelo preguntaba).
 - El aviso del catálogo de pausas se agrega siempre a "Fuente y criterio", desde el código, porque el modelo a veces lo omitía.
 - `.env.example` documenta ahora `LLM_MODEL`, `LLM_FALLBACK_*` y `OFFLINE_MODE`.
+
+## Suite de evaluación (semana 10)
+- La suite genera una base temporal con la semilla 42 hasta el 2026-10-28 y fija "hoy" en 2026-10-29 con un parámetro nuevo, `agente.responder(..., hoy=...)`. Así "esta semana" y "los últimos 7 días" siempre significan lo mismo. No toca `data/`.
+- Durante la suite, `guardar_regla` apunta a un `reglas.json` temporal.
+- Un caso pasa si cumple su invariante. Hay siete tipos: número, texto, hora, herramienta, rechazo, sin ejecución y pendiente. Las herramientas requeridas se miden aparte, como recuperación.
+- Cuentan como llamadas las herramientas que el modelo pidió con argumentos válidos; `guardar_regla` cuenta aunque quede pendiente. En las herramientas requeridas, una lista interna significa "cualquiera de estas".
+- Para buscar números en la respuesta se ignoran fechas y horas, y se aceptan formas como "1.206", "1 206" y "942,3". Tolerancia de 0,6 donde vale redondear a entero.
+- **Pausa de 28 s entre preguntas.** La capa gratuita de Groq da 8 000 tokens por minuto (cabecera `x-ratelimit-limit-tokens`) y cada pregunta usa unos 4 000; sin pausa se mediría la cuota y no al coach.
+- El p90 se calcula por rango más cercano.
+- Los resultados y sus trazas se suben al repositorio (`producto/evals/resultados/`) porque son datos sintéticos.
+- **La prueba corta de la suite encontró una doble confirmación.** Ante "Marca WhatsApp como no sirve", el modelo pedía confirmación en texto en vez de llamar a `guardar_regla`, que ya muestra Aprobar y Rechazar. Antes de las corridas medidas ajusté la descripción de la herramienta y la regla 5 del prompt: llamarla no guarda nada, así que debe llamarla de una vez.
