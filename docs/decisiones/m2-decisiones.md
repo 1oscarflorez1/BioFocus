@@ -108,3 +108,25 @@ Base temporal aparte para cada corrida y sin clasificador LLM (`LLM_CLASIFICADOR
 | `derecho.mp4` (31,6 s) | Ninguna alerta | 0,494 | 0,392 a 0,616 (−21 % a +25 %), mediana 0,475 (−4 %) | Siempre «bien». Lo más bajo fue −21 % por menos de 2 s. Sin alertas. | Sí |
 | `encorvado.mp4` (30,8 s) | Alerta de postura | 0,480 | Derecho: 0,434 a 0,480 (−10 % a 0 %). Encorvado desde el s 11: 0,150 a 0,278 (−69 % a −42 %), mediana 0,243 (−49 %) | «Revisa» desde el s 12,3 y una sola alerta en el s 16,5 (−52 %), a los 5 s. Después no repite: queda sin rearmar hasta volver a −10 %. | Sí |
 | `distraido.mp4` (36,5 s) | Ver qué hace | 0,463 | Derecho: −13 % a −4 %. Mirando a un lado: +20 % a +33 %. Mirando el celular: 0,214 a 0,331 (−54 % a −29 %), mediana −51 %. Final: −20 % a +7 % | Mirar a un lado **sube** el número (los hombros se ven más angostos): sin alerta. Mirar el celular lo baja como encorvarse: «revisa» del s 24,5 al 29, unos 4,6 s, sin llegar a los 5 s: sin alerta. Nunca «no te veo». No hubo alerta de distracción porque esa sale de las ventanas, no de la cámara. | Sin expectativa: se comporta según la regla |
+
+## Dashboard en vivo (bloque 2, 2026-10-31)
+- **Iniciar y Terminar desde la app.** «Iniciar sesión» lanza `producto/monitor.py` como proceso aparte, con su propio grupo de procesos y salida en `data/monitor.log`, y espera hasta 40 s a que registre la sesión. «Terminar sesión» pone la marca `detener`. El monitor la ve en menos de 1 s, escribe `fin_sesion` y cierra. Si en 12 s no cerró, la app le manda Ctrl+Break, y si aun así sigue, cierra la sesión en la base. Probado en el navegador con los videos: Iniciar, alerta en vivo y Terminar (`terminada desde la app`).
+- En Windows, el `python.exe` del `.venv` lanza al intérprete real como proceso hijo, así que su PID no es el de `Popen`. La app reconoce su sesión por la hora de inicio y guarda el PID del grupo para el Ctrl+Break.
+- Un monitor iniciado desde la terminal también se ve en la app (hay que recargar la página) y se puede terminar desde ella.
+- **El panel se refresca cada 2 s solo mientras hay una sesión en curso.** Sin sesión no se refresca, porque el refresco cerraba el menú del formulario (pasó en la prueba).
+- El panel muestra:
+  - la meta;
+  - el tiempo transcurrido frente al planeado;
+  - la app y categoría de la ventana actual;
+  - el estado de la postura con su porcentaje;
+  - el conteo de alertas;
+  - la última alerta (en rojo si fue hace 60 s o menos);
+  - los minutos por categoría, con el tramo en curso;
+  - una línea de tiempo con las ventanas por categoría y las alertas como líneas verticales.
+  
+  Sin sesión en curso, muestra la última sesión real.
+- **Real y demo por separado:** en la barra lateral, «Sesiones reales» (con tabla) y «Semana de datos demo» se calculan con `es_demo`, no por fechas. El panel de los últimos 7 días que mezclaba las dos se quitó.
+- **Imagen:** el formulario ofrece «Cámara» o un video de `grabaciones/` (plan B). Duración por defecto 3 min y modo demo encendido, para la demo.
+- **Coach:** nueva herramienta `sesion_actual`, sin parámetros, con la sesión real en curso o la última. Devuelve estado, minutos, ventana actual, postura, minutos por categoría, alertas con su hora y apps que no sirven. Nunca devuelve la meta ni títulos. El coach ya usaba la fecha real de hoy (`agente.responder` sin `hoy`); la suite sigue con su fecha fija. La medición de `semana10.md` es de la versión con 6 herramientas.
+- El texto de privacidad de la app ahora dice que el monitor manda a Groq los títulos ambiguos no privados.
+- La página usa todo el ancho y su título sigue empezando por «BioFocus ·», que `reglas.json` cuenta como neutro.

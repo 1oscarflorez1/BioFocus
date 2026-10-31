@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import closing
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -146,13 +146,40 @@ class TestHerramientas(ConDemo):
 
     def test_descripciones_como_prompt(self):
         esquemas = h.esquemas()
-        self.assertEqual(len(esquemas), 6)
+        self.assertEqual(len(esquemas), 7)
         for e in esquemas:
             d = e["function"]["description"]
             with self.subTest(herramienta=e["function"]["name"]):
                 self.assertIn("Úsala", d)
                 self.assertIn("No la uses", d)
                 self.assertIn("Prerrequisito", d)
+
+    def test_sesion_actual_sin_reales_y_con_una_en_curso(self):
+        r = self.ejecutar("sesion_actual", {})
+        self.assertEqual((r["hay_sesion"], r["datos_demo"]), (False, False), "la semana demo no cuenta como sesión real")
+        with tempfile.TemporaryDirectory() as tmp:
+            bd = Path(tmp) / "vivo.sqlite"
+            ahora = datetime.now().replace(microsecond=0)
+            F = datos.FORMATO
+            with closing(datos.conectar(bd)) as con:
+                sid = datos.crear_sesion(con, (ahora - timedelta(minutes=2)).strftime(F), None, "meta secreta", 3)
+                con.execute(
+                    "INSERT INTO estado_monitor (sesion_id, pid, modo_demo, actualizado, postura, postura_pct, app, categoria, ventana_desde) "
+                    "VALUES (?, 1, 1, ?, 'revisa', -30.0, 'YouTube', 'no_sirve', ?)",
+                    (sid, ahora.strftime(F), (ahora - timedelta(seconds=30)).strftime(F)),
+                )
+                datos.agregar_evento(con, sid, (ahora - timedelta(minutes=2)).strftime(F), "ventana", app="VS Code", categoria="sirve", duracion_s=90)
+                datos.agregar_evento(con, sid, (ahora - timedelta(seconds=10)).strftime(F), "alerta_distraccion", app="YouTube", categoria="no_sirve", detalle="10 s")
+                con.commit()
+            r = h.ejecutar("sesion_actual", None, ruta_bd=bd)
+        self.assertEqual((r["hay_sesion"], r["estado"], r["alertas_distraccion"]), (True, "en curso", 1))
+        self.assertEqual(r["ventana_actual"], {"app": "YouTube", "categoria": "no_sirve"})
+        self.assertEqual(r["postura_ahora"]["estado"], "revisa")
+        self.assertEqual(r["apps_no_sirve"][0]["app"], "YouTube")
+        self.assertNotIn("meta secreta", json.dumps(r, ensure_ascii=False))
+        self.assertIn("en curso", h.resumir("sesion_actual", r))
+        with self.assertRaises(h.ErrorValidacion):
+            h.validar("sesion_actual", {"desde": "2026-10-31"})
 
 
 if __name__ == "__main__":

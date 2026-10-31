@@ -382,6 +382,56 @@ def pausas_recomendadas(motivo: str) -> dict:
     }
 
 
+def _v_sin_parametros(args: Any, **_) -> dict:
+    _claves(args if args is not None else {}, set(), set())
+    return {}
+
+
+def sesion_actual(*, ruta_bd: str | Path | None = None) -> dict:
+    """La sesión real en curso o, si no hay, la última real. Sin la meta y sin títulos (no existen en la base)."""
+    import vivo  # aquí para no cargarlo en las herramientas que no lo usan
+
+    with closing(datos.conectar_lectura(ruta_bd)) as con:
+        sesion_id = vivo.ultima_sesion_real(con)
+        if sesion_id is None:
+            return {
+                "hay_sesion": False,
+                "datos_demo": False,
+                "nota": "Todavía no hay sesiones reales registradas por el monitor; solo la semana de datos demo.",
+            }
+        r = vivo.resumen(con, sesion_id, datetime.now())
+        no_sirve: dict[str, float] = defaultdict(float)
+        for t in r["tramos"]:
+            if t["categoria"] == "no_sirve":
+                no_sirve[_app_segura(t["app"])] += (t["fin"] - t["inicio"]).total_seconds() / 60
+    return {
+        "hay_sesion": True,
+        "datos_demo": False,
+        "estado": r["estado"],
+        "fecha": r["inicio"][:10],
+        "hora_inicio": r["inicio"][11:16],
+        "minutos_transcurridos": round(r["transcurrido_s"] / 60, 1),
+        "minutos_planeados": r["plan_min"],
+        "modo_demo_tiempos_cortos": r["modo_demo"],
+        "ventana_actual": (
+            {"app": _app_segura(r["ventana_actual"]["app"]), "categoria": r["ventana_actual"]["categoria"]}
+            if r["ventana_actual"] else None
+        ),
+        "postura_ahora": r["postura"],
+        "minutos_por_categoria": r["minutos_por_categoria"],
+        "porcentaje_por_categoria": r["porcentaje_por_categoria"],
+        "alertas_postura": r["alertas_postura"],
+        "alertas_distraccion": r["alertas_distraccion"],
+        "ultimas_alertas": [
+            {"hora": a["hora"], "tipo": a["tipo"], **({"app": _app_segura(a["app"])} if a["app"] else {})}
+            for a in r["alertas"][-10:]
+        ],
+        "apps_no_sirve": [
+            {"app": app, "minutos": round(m, 1)} for app, m in sorted(no_sirve.items(), key=lambda x: -x[1])[:5]
+        ],
+    }
+
+
 def guardar_regla(
     app: str,
     categoria: str,
@@ -548,6 +598,26 @@ REGISTRO: dict[str, Herramienta] = {
             usa_bd=False,
         ),
         Herramienta(
+            nombre="sesion_actual",
+            titulo="Sesión en vivo",
+            descripcion=(
+                "Resume la sesión real que está en curso, registrada por el monitor (o la última sesión real si "
+                "no hay una en curso): estado, minutos transcurridos y planeados, ventana actual (app y "
+                "categoría), estado de la postura, minutos por categoría, alertas de postura y de distracción "
+                "con su hora, y las apps que no sirven en esa sesión. Úsala para preguntas sobre esta sesión, "
+                "ahora, en vivo o la sesión de hoy: cómo voy, cuántas alertas llevo, qué me distrajo. No la "
+                "uses para rangos de fechas ni para la semana demo (usa las otras herramientas). Prerrequisito: "
+                "ninguno; no tiene parámetros, llámala con {}."
+            ),
+            parametros={"type": "object", "properties": {}, "required": []},
+            validar=_v_sin_parametros,
+            funcion=sesion_actual,
+            criterio=(
+                "toma la sesión real en curso o la última real; suma los minutos de cada ventana registrada, "
+                "incluida la actual, y cuenta sus alertas"
+            ),
+        ),
+        Herramienta(
             nombre="guardar_regla",
             titulo="Regla propuesta",
             descripcion=(
@@ -630,4 +700,14 @@ def resumir(nombre: str, r: dict) -> str:
         return f"{len(r['pausas'])} pausas del catálogo para «{r['motivo']}»"
     if nombre == "guardar_regla":
         return f"regla guardada: {r['app']} → {r['categoria']}"
+    if nombre == "sesion_actual":
+        if not r["hay_sesion"]:
+            return "no hay sesiones reales todavía"
+        actual = r["ventana_actual"]
+        return (
+            f"sesión {r['estado']} desde las {r['hora_inicio']}: {r['minutos_transcurridos']} min de "
+            f"{r['minutos_planeados']} planeados; {r['alertas_postura']} alertas de postura y "
+            f"{r['alertas_distraccion']} de distracción"
+            + (f"; ventana actual {actual['app']} ({actual['categoria']})" if actual else "")
+        )
     return "ok"
