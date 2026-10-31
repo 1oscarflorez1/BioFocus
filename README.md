@@ -99,6 +99,14 @@ Si se alcanza un límite, la respuesta lo dice. El porqué de cada uno está com
 
 Son 26 pruebas y no usan red ni llaves: un servidor falso en `127.0.0.1` imita al proveedor.
 
+## Evaluación
+```powershell
+.venv\Scripts\python producto\evals\correr_evals.py --solo-sql
+.venv\Scripts\python producto\evals\correr_evals.py --corridas 3
+```
+
+El primer comando muestra la respuesta esperada de cada uno de los 12 casos de `producto/evals/casos.json`, calculada con su propio SQL. El segundo hace las preguntas de verdad con el proveedor de `.env` y calcula tasa de éxito, tokens y USD por tarea, latencia mediana y p90, y recuperación de herramientas. Tarda unos 20 minutos porque espera 28 s entre preguntas, para no chocar con el límite por minuto de la capa gratuita. Los resultados y sus trazas quedan en `producto/evals/resultados/`. Los últimos están en `docs/decisiones/semana10.md`.
+
 ## Estructura
 | Ruta | Qué es |
 |---|---|

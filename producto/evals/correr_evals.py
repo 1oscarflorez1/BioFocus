@@ -24,6 +24,7 @@ import sys
 import tempfile
 import time
 from collections import Counter
+from types import SimpleNamespace
 from contextlib import closing
 from datetime import date, datetime
 from pathlib import Path
@@ -42,8 +43,14 @@ CARPETA_RESULTADOS = CARPETA / "resultados"
 
 # Precios publicados, en USD por millón de tokens (entrada, salida). Solo los verificados en la página
 # del proveedor; un modelo que no está aquí se informa solo en tokens.
-PRECIOS_USD_POR_MILLON: dict[str, tuple[float, float]] = {}
-FUENTE_PRECIOS = ""
+PRECIOS_USD_POR_MILLON: dict[str, tuple[float, float]] = {
+    "groq · openai/gpt-oss-120b": (0.15, 0.60),
+}
+FUENTE_PRECIOS = (
+    "https://console.groq.com/docs/model/openai/gpt-oss-120b, consultada el 2026-10-29: 0,15 USD por millón de "
+    "tokens de entrada y 0,60 de salida (sin descuento por entrada en caché: es una cota superior). "
+    "gemini-3.5-flash no aparece en https://ai.google.dev/gemini-api/docs/pricing ese día: solo tokens."
+)
 
 GUIONES = "\\-\u2010\u2011\u2012\u2013\u2014\u2015"
 _FECHA = re.compile(rf"\d{{4}}[{GUIONES}]\d{{1,2}}[{GUIONES}]\d{{1,2}}")
@@ -218,6 +225,35 @@ def imprimir_metricas(m: dict) -> None:
     print(f"Por caso: {m['por_caso']}")
 
 
+# ---------------------------------------------------------------- reevaluación
+
+
+def reevaluar(ruta: Path) -> None:
+    """Vuelve a aplicar las comprobaciones de casos.json a las respuestas guardadas, sin llamar al modelo.
+
+    Las invariantes "sin_ejecucion" y "pendiente" dependen de reglas.json durante la corrida: conservan su veredicto.
+    Si un veredicto cambia, el original queda en "pasa_original" y "motivo_original".
+    """
+    datos = json.loads(ruta.read_text(encoding="utf-8"))
+    suite = {c["id"]: c for c in json.loads(RUTA_CASOS.read_text(encoding="utf-8"))["casos"]}
+    cambios = []
+    for e in datos["ejecuciones"]:
+        caso = suite[e["id"]]
+        if caso["invariante"]["tipo"] in ("sin_ejecucion", "pendiente"):
+            continue
+        r = SimpleNamespace(texto=e["respuesta"], traza=e["traza"], pendiente=e["traza"].get("pendiente"))
+        pasa, motivo = evaluar(caso, r, caso.get("esperado"), ruta.parent / "reglas-que-no-existe.json")
+        if pasa != e["pasa"] and "pasa_original" not in e:
+            e["pasa_original"], e["motivo_original"] = e["pasa"], e["motivo"]
+            cambios.append(f"corrida {e['corrida']} {e['id']}: {e['pasa']} → {pasa}")
+        e["pasa"], e["motivo"] = pasa, motivo
+    datos["metricas"] = metricas(datos["ejecuciones"])
+    datos.setdefault("reevaluaciones", []).append({"fecha": datetime.now().isoformat(timespec="seconds"), "cambios": cambios})
+    ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=1), encoding="utf-8")
+    print("Veredictos que cambiaron:", cambios or "ninguno")
+    imprimir_metricas(datos["metricas"])
+
+
 # ---------------------------------------------------------------- ejecución
 
 
@@ -231,8 +267,12 @@ def main() -> int:
     parser.add_argument("--solo-sql", action="store_true", help="solo calcula e imprime la respuesta esperada de cada caso")
     parser.add_argument("--metricas", type=Path, help="recalcula las métricas de un archivo de resultados")
     parser.add_argument("--carpeta", type=Path, default=CARPETA_RESULTADOS, help="dónde guardar los resultados")
+    parser.add_argument("--reevaluar", type=Path, help="vuelve a aplicar las comprobaciones a un archivo de resultados")
     args = parser.parse_args()
 
+    if args.reevaluar:
+        reevaluar(args.reevaluar)
+        return 0
     if args.metricas:
         datos = json.loads(args.metricas.read_text(encoding="utf-8"))
         datos["metricas"] = metricas(datos["ejecuciones"])

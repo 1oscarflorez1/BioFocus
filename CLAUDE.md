@@ -17,6 +17,7 @@ Desde la raíz, en PowerShell, con Python 3.13. Detalle en README.md.
 - Consola: `.venv\Scripts\python producto\agente.py "¿a qué hora me distraigo más?"` (con `--traza` imprime el JSON).
 - Pruebas, sin red ni llaves: `.venv\Scripts\python -m unittest discover -s tests`.
 - Modelos con herramientas: `.venv\Scripts\python producto\verificar_modelos.py`.
+- Evaluación (12 casos, usa el proveedor; unos 20 min con 3 corridas): `.venv\Scripts\python producto\evals\correr_evals.py --corridas 3`. Con `--solo-sql` muestra la respuesta esperada de cada caso sin llamar al modelo.
 - Trazas: `traces/AAAA-MM-DD.jsonl` (git las ignora).
 
 ## Convenciones
