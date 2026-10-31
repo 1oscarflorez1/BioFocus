@@ -263,7 +263,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Suite de evaluación del Coach de BioFocus.")
     parser.add_argument("--corridas", type=int, default=3)
     parser.add_argument("--casos", default="", help="ids separados por coma (por defecto, todos)")
-    parser.add_argument("--pausa", type=float, default=20, help="segundos entre preguntas, para no medir el límite por minuto de la capa gratuita")
+    parser.add_argument("--pausa", type=float, default=28, help="segundos entre preguntas, para no medir el límite por minuto de la capa gratuita")
     parser.add_argument("--solo-sql", action="store_true", help="solo calcula e imprime la respuesta esperada de cada caso")
     parser.add_argument("--metricas", type=Path, help="recalcula las métricas de un archivo de resultados")
     parser.add_argument("--carpeta", type=Path, default=CARPETA_RESULTADOS, help="dónde guardar los resultados")
