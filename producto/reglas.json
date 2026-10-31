@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "nota": "Reglas fijas del monitor. Los títulos se miran solo en memoria para clasificar y nunca se guardan. Los patrones de título son expresiones regulares sin distinguir mayúsculas. Los de distracciones y neutros solo se miran en navegadores y apps de la Tienda, salvo que la regla diga \"en_cualquier_app\". Los privados se miran en todas las apps y nunca salen del equipo: se guardan como app \"Privado\", sin clasificar. Las reglas que apruebas en el coach (data/reglas.json) mandan sobre las distracciones fijas, no sobre privados ni neutros.",
+  "ignorar": {
+    "titulos": ["^Conmutación de tareas$", "^Task Switching$", "^Vista de tareas$", "^Task View$"],
+    "procesos": ["searchhost.exe", "startmenuexperiencehost.exe", "shellexperiencehost.exe", "lockapp.exe", "searchapp.exe"]
+  },
+  "privados": [
+    {"tema": "banca", "titulo": "\\bbanco\\b|bancolombia|davivienda|daviplata|nequi|\\bbbva\\b|scotiabank|colpatria|av villas|banco de bogot|paypal|sucursal virtual"},
+    {"tema": "correo", "titulo": "gmail|outlook|hotmail|bandeja de entrada|\\binbox\\b|correo", "procesos": ["outlook.exe", "olk.exe", "thunderbird.exe"]},
+    {"tema": "contraseñas", "titulo": "contraseña|password|bitwarden|1password|keepass", "procesos": ["1password.exe", "keepass.exe", "keepassxc.exe", "bitwarden.exe"]},
+    {"tema": "salud", "titulo": "historia clínica|resultados de laboratorio|cita médica|\\beps\\b|mi salud"},
+    {"tema": "navegación privada", "titulo": "inprivate|incógnito|incognito"}
+  ],
+  "neutros": [
+    {"app": "BioFocus", "titulo": "^BioFocus( monitor$| ·)", "en_cualquier_app": true},
+    {"app": "Meet", "titulo": "^Meet\\b|Google Meet|meet\\.google"},
+    {"app": "Teams", "titulo": "Microsoft Teams", "procesos": ["ms-teams.exe", "teams.exe"]},
+    {"app": "Zoom", "titulo": "\\bZoom\\b", "procesos": ["zoom.exe"]}
+  ],
+  "distracciones": [
+    {"app": "YouTube", "titulo": "YouTube"},
+    {"app": "WhatsApp", "titulo": "WhatsApp", "procesos": ["whatsapp.exe", "whatsapp.root.exe"]},
+    {"app": "Instagram", "titulo": "Instagram"},
+    {"app": "TikTok", "titulo": "TikTok"},
+    {"app": "Facebook", "titulo": "Facebook"},
+    {"app": "Netflix", "titulo": "Netflix", "procesos": ["netflix.exe"]},
+    {"app": "Discord", "titulo": "Discord", "procesos": ["discord.exe"]},
+    {"app": "Twitch", "titulo": "Twitch"},
+    {"app": "Reddit", "titulo": "Reddit"},
+    {"app": "X", "titulo": "/ X$|\\ben X:|Twitter"},
+    {"app": "Prime Video", "titulo": "Prime Video"},
+    {"app": "Disney+", "titulo": "Disney\\+"},
+    {"app": "Steam", "procesos": ["steam.exe", "steamwebhelper.exe"]}
+  ],
+  "sin_informacion": "^(|program manager|nueva pestaña|nueva pestaña privada|new tab|pestaña nueva|página de inicio|inicio|start)$"
+}

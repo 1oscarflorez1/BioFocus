@@ -52,15 +52,34 @@ CREATE TABLE IF NOT EXISTS eventos (
 CREATE INDEX IF NOT EXISTS idx_eventos_tipo_ts ON eventos (tipo, ts);
 CREATE INDEX IF NOT EXISTS idx_eventos_sesion ON eventos (sesion_id);
 CREATE INDEX IF NOT EXISTS idx_sesiones_inicio ON sesiones (inicio);
+-- Estado en vivo de una sesión real, que escribe el monitor cada segundo. Sin títulos ni imágenes.
+CREATE TABLE IF NOT EXISTS estado_monitor (
+    sesion_id INTEGER PRIMARY KEY REFERENCES sesiones(id) ON DELETE CASCADE,
+    pid INTEGER,                           -- proceso del monitor
+    modo_demo INTEGER NOT NULL DEFAULT 0 CHECK (modo_demo IN (0, 1)),
+    actualizado TEXT NOT NULL,             -- última señal de vida del monitor
+    postura TEXT,                          -- calibrando | bien | revisa | no_te_veo | terminada
+    postura_pct REAL,                      -- variación frente a la línea base, en %
+    app TEXT,                              -- app de la ventana actual, nunca el título
+    categoria TEXT CHECK (categoria IS NULL OR categoria IN ({_lista_sql(CATEGORIAS)})),
+    ventana_desde TEXT,                    -- desde cuándo está en esa ventana
+    detener INTEGER NOT NULL DEFAULT 0 CHECK (detener IN (0, 1))  -- la app pide terminar la sesión
+);
 """
+FORMATO = "%Y-%m-%d %H:%M:%S"
 
 
 def conectar(ruta: str | Path | None = None) -> sqlite3.Connection:
-    """Abre la base para escribir (y la crea si falta). La usan el producto y el generador demo."""
+    """Abre la base para escribir (y la crea si falta). La usan el producto, el monitor y el generador demo.
+
+    Modo WAL: el monitor escribe mientras la app y el coach leen, sin bloquearse.
+    """
     ruta = Path(ruta) if ruta else RUTA_BD
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(ruta)
+    con = sqlite3.connect(ruta, timeout=10)
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode = WAL")
+    con.execute("PRAGMA busy_timeout = 10000")
     con.execute("PRAGMA foreign_keys = ON")
     con.executescript(ESQUEMA)
     return con

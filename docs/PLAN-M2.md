@@ -13,3 +13,9 @@ Tareas aprobadas por dos instrucciones del 2026-10-29 (1 a 7: el coach; 8 a 12: 
 10. Estrategia de datos (`docs/decisiones/semana08.md`). ¿Explica SQL parametrizado sin RAG y por qué se descartan RAG, SQL libre y la base en el contexto? → commit y push
 11. Errores (`docs/decisiones/m2-errores.md`). ¿Los tres errores forzados tienen lo que se ve en pantalla y su traza? → commit y push
 12. Prueba del compañero (`docs/decisiones/prueba-companero.md`). ¿La plantilla pide quién, qué intentó, dónde se trabó y qué cambié? → commit y push
+
+Tareas aprobadas por la instrucción del 2026-10-31 (demo en vivo):
+
+13. Monitor (`producto/monitor.py`, `ventanas.py`, `vivo.py`, `reglas.json`). ¿Con `--video` en modo demo, `derecho.mp4` no alerta, `encorvado.mp4` alerta la postura y cada sesión deja sus eventos y `fin_sesion` en SQLite, sin guardar imágenes ni títulos? → commit y push
+14. Dashboard en vivo (`producto/app.py`). ¿Iniciar y Terminar lanzan y detienen el monitor, el panel se actualiza cada 2 s y el coach responde sobre la sesión en curso con la fecha real? → commit y push
+15. Prueba de 3 minutos y documentación (`README.md`, `CLAUDE.md`). ¿La guía provoca cada alerta en una sesión real en modo demo? → commit y push

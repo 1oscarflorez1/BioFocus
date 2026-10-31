@@ -286,10 +286,12 @@ def llamar_llm(
     interruptores: Interruptores | None = None,
     traza: trazas.Traza | None = None,
     timeout_s: float = TIMEOUT_S,
+    opciones: dict[str, Any] | None = None,
 ) -> RespuestaLLM:
     """Una llamada a chat/completions con herramientas, con reintentos, respaldo y mensajes claros.
 
-    Nunca lanza excepciones por errores del proveedor: devuelve RespuestaLLM(ok=False, ...).
+    `opciones` agrega campos al cuerpo (por ejemplo max_tokens o reasoning_effort); lo usa el clasificador
+    de ventanas del monitor. Nunca lanza excepciones por errores del proveedor: devuelve RespuestaLLM(ok=False, ...).
     """
     inter = interruptores or Interruptores()
     traza = traza or trazas.TrazaNula()
@@ -306,6 +308,7 @@ def llamar_llm(
     cuerpo: dict[str, Any] = {"messages": mensajes, "temperature": TEMPERATURA, "max_tokens": MAX_TOKENS_RESPUESTA}
     if herramientas:
         cuerpo["tools"], cuerpo["tool_choice"] = herramientas, "auto"
+    cuerpo.update(opciones or {})
 
     fallos: list[_Fallo] = []
     for i, perfil in enumerate(perfiles):
