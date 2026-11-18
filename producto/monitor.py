@@ -59,6 +59,11 @@ VISIBILIDAD_MIN = 0.5
 AVISO_S = 6  # cuánto queda el aviso grande en pantalla
 LATIDO_S = 1.0  # cada cuánto se escribe el estado en vivo y se mira si la app pidió terminar
 ANCHO_VISTA = 960  # la ventana dibuja una copia reducida; la detección usa el cuadro completo
+# Cuánto se tolera que la cámara no entregue cuadros antes de cerrar la sesión; a la mitad se reabre una vez.
+# Por qué: al arrancar puede tardar (otra app la está soltando) y a mitad de sesión puede cortarse un momento;
+# antes, un solo cuadro perdido terminaba la sesión. Es menos que los 15 s con que la app da al monitor por caído.
+CORTE_CAMARA_MAX_S = 10.0
+ESPERA_SIN_CUADRO_S = 0.1  # entre un intento y el siguiente mientras no hay imagen
 
 
 class ErrorMonitor(Exception):
@@ -156,6 +161,32 @@ class Postura:
         if actual >= self.base * (1 - REARME):
             self.armada = True
         return False
+
+
+class CorteCamara:
+    """Decide qué hacer cada vez que la cámara no entrega un cuadro: esperar, reabrirla (una vez) o rendirse."""
+
+    def __init__(self, max_s: float = CORTE_CAMARA_MAX_S):
+        self.max_s = max_s
+        self.desde: float | None = None  # cuándo empezó el corte en curso (reloj monótono)
+        self.reabierta = False
+
+    def cuadro_ok(self) -> float | None:
+        """Llegó un cuadro: termina el corte. Devuelve desde cuándo duraba, o None si no había corte."""
+        desde, self.desde, self.reabierta = self.desde, None, False
+        return desde
+
+    def fallo(self, t: float) -> str:
+        """'esperar', 'reabrir' (una sola vez, a la mitad del plazo) o 'rendirse' (pasó el plazo)."""
+        if self.desde is None:
+            self.desde = t
+        corte = t - self.desde
+        if corte >= self.max_s:
+            return "rendirse"
+        if corte >= self.max_s / 2 and not self.reabierta:
+            self.reabierta = True
+            return "reabrir"
+        return "esperar"
 
 
 class Distraccion:
@@ -356,10 +387,18 @@ class Registro:
         self.con.commit()
 
     def tramo(self, tramo: ventanas.Tramo) -> None:
-        if tramo.duracion_s > 0:
-            datos.agregar_evento(self.con, self.id, _ts(tramo.inicio), "ventana",
-                                 app=tramo.clase.app, categoria=tramo.clase.categoria, duracion_s=tramo.duracion_s)
-            self.con.commit()
+        if tramo.duracion_s <= 0:
+            return
+        inicio = _ts(tramo.inicio)
+        # Si la app dio al monitor por caído (por ejemplo, tras suspender el equipo), ya guardó este tramo
+        # con vivo.cerrar_sin_monitor: no se escribe otra vez.
+        if self.con.execute(
+            "SELECT 1 FROM eventos WHERE sesion_id = ? AND tipo = 'ventana' AND ts = ?", (self.id, inicio)
+        ).fetchone():
+            return
+        datos.agregar_evento(self.con, self.id, inicio, "ventana",
+                             app=tramo.clase.app, categoria=tramo.clase.categoria, duracion_s=tramo.duracion_s)
+        self.con.commit()
 
     def alerta(self, tipo: str, t: float, app: str | None = None, detalle: str = "") -> None:
         datos.agregar_evento(self.con, self.id, _ts(t), f"alerta_{tipo}", app=app,
@@ -397,6 +436,7 @@ def _interrumpir(signum, frame):  # Ctrl+Break (lo manda la app como segundo int
 def correr(args: argparse.Namespace) -> int:
     import cv2
     import mediapipe as mp
+    import numpy as np
     from mediapipe.tasks.python import BaseOptions, vision
 
     verificar_modelo()
@@ -447,30 +487,48 @@ def correr(args: argparse.Namespace) -> int:
     ultimo_ms, ultimo_latido, cuadros_video, ultimo_detalle = -1, 0.0, 0, 0.0
     valor: float | None = None
     primera_vez = True
+    corte = CorteCamara()
+    tam_sin_imagen = (480, 640)  # alto y ancho del cuadro negro, hasta que la cámara entregue el primero
     try:
         while True:
             ok, cuadro = fuente.read()
-            if not ok:
-                motivo = (
-                    ("fin del video" if cuadros_video else "el video no se pudo leer")
-                    if args.video else "la cámara dejó de entregar cuadros"
-                )
+            if not ok and args.video:
+                motivo = "fin del video" if cuadros_video else "el video no se pudo leer"
                 break
-            if args.video:  # una pasada, al ritmo del video, no más rápido
-                cuadros_video += 1
-                espera = t0_mono + cuadros_video / fps_video - time.monotonic()
-                if espera > 0:
-                    time.sleep(espera)
+            if not ok:  # la cámara no entregó cuadro: se tolera un corte corto sin cerrar la sesión
+                if corte.desde is None:
+                    print("La cámara no entrega imagen: reintento.", flush=True)
+                accion = corte.fallo(time.monotonic())
+                if accion == "rendirse":
+                    motivo = "la cámara dejó de entregar cuadros"
+                    break
+                if accion == "reabrir":
+                    fuente.release()
+                    fuente = cv2.VideoCapture(args.camara)
+                time.sleep(ESPERA_SIN_CUADRO_S)
+                cuadro = np.zeros((*tam_sin_imagen, 3), dtype=np.uint8)  # cuadro negro: no hay nada que detectar
             else:
-                cuadro = cv2.flip(cuadro, 1)  # como un espejo; el número de postura no cambia
+                inicio_corte = corte.cuadro_ok()
+                if inicio_corte is not None:
+                    print(f"La cámara volvió tras {time.monotonic() - inicio_corte:.1f} s sin imagen.", flush=True)
+                if args.video:  # una pasada, al ritmo del video, no más rápido
+                    cuadros_video += 1
+                    espera = t0_mono + cuadros_video / fps_video - time.monotonic()
+                    if espera > 0:
+                        time.sleep(espera)
+                else:
+                    cuadro = cv2.flip(cuadro, 1)  # como un espejo; el número de postura no cambia
             t = time.time()
             alto, ancho = cuadro.shape[:2]
+            tam_sin_imagen = (alto, ancho)
 
-            ms = max(int((time.monotonic() - t0_mono) * 1000), ultimo_ms + 1)
-            ultimo_ms = ms
-            imagen = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(cuadro, cv2.COLOR_BGR2RGB))
-            resultado = detector.detect_for_video(imagen, ms)
-            puntos = resultado.pose_landmarks[0] if resultado.pose_landmarks else None
+            puntos = None
+            if ok:
+                ms = max(int((time.monotonic() - t0_mono) * 1000), ultimo_ms + 1)
+                ultimo_ms = ms
+                imagen = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(cuadro, cv2.COLOR_BGR2RGB))
+                resultado = detector.detect_for_video(imagen, ms)
+                puntos = resultado.pose_landmarks[0] if resultado.pose_landmarks else None
             valor = numero_postura(puntos, ancho, alto) if puntos else None
 
             foto = hilo.foto
@@ -517,7 +575,8 @@ def correr(args: argparse.Namespace) -> int:
                                   + (" · modo demo" if args.modo_demo else "") + (" · video" if args.video else ""),
                     "meta": f"Meta: {args.meta}"[:80],
                     "postura": postura.estado,
-                    "linea_postura": linea_postura(postura, t, valor is not None),
+                    "linea_postura": ("Cámara sin imagen: reintentando…" if corte.desde is not None
+                                      else linea_postura(postura, t, valor is not None)),
                     "categoria": foto.categoria,
                     "linea_ventana": linea_ventana(foto, t),
                     "aviso": aviso,

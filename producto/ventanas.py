@@ -8,6 +8,8 @@
 - Al LLM solo van los títulos ambiguos no privados, con la meta de la sesión. Si falla o
   tarda más de 5 s, la ventana queda sin_clasificar. Un título con instrucciones nunca
   sale como "sirve".
+- Límites del LLM: una consulta por título equivalente (los que solo cambian en números o
+  símbolos comparten caché) y como máximo MAX_LLM_POR_MINUTO consultas por minuto.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import sys
 import threading
 import time
 import unicodedata
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as TiempoAgotado
 from dataclasses import dataclass
@@ -36,6 +39,10 @@ INTERVALO_S = 2  # cada cuánto se lee la ventana activa
 MINIMO_S = 5  # una ventana que dura menos no cuenta ni corta la anterior
 TIMEOUT_LLM_S = 5  # después, la ventana queda sin_clasificar
 REINTENTAR_FALLO_S = 120  # un título que no se pudo clasificar se vuelve a intentar después de esto
+# Tope de consultas al LLM por minuto. Por qué: una página puede cambiar su título sin parar y cada título
+# nuevo sería otra consulta (cuota y títulos que salen del equipo); al navegar normal se clasifican pocas
+# páginas por minuto, y pasado el tope la ventana queda sin_clasificar, que no alerta.
+MAX_LLM_POR_MINUTO = 6
 CLASIFICADOR_POR_DEFECTO = ("groq", "openai/gpt-oss-20b")  # otro cupo que el del coach (gpt-oss-120b)
 
 APP_PRIVADA = "Privado"
@@ -97,6 +104,21 @@ def sin_tildes(texto: str) -> str:
 def parece_instruccion(titulo: str) -> bool:
     texto = sin_tildes(titulo)
     return any(p.search(texto) for p in _INSTRUCCIONES)
+
+
+_SIMBOLOS = re.compile(r"[^\w\s]+")
+_NUMEROS = re.compile(r"\d+")
+
+
+def clave_titulo(texto: str) -> str:
+    """Clave de caché de un título: en minúsculas, sin números y sin símbolos.
+
+    Un temporizador («24:59 Pomodoro»), un contador («(3) Foro») o el spinner de una terminal cambian el
+    título en cada lectura sin cambiar de qué trata: todos comparten una sola consulta al LLM.
+    """
+    minusculas = texto.casefold()
+    clave = " ".join(_NUMEROS.sub(" ", _SIMBOLOS.sub(" ", minusculas)).split())
+    return clave or minusculas.strip()  # un título que es solo números o símbolos se queda como está
 
 
 # ---------------------------------------------------------------- ventana activa (Windows)
@@ -238,7 +260,7 @@ class Clasificacion:
     app: str
     categoria: str  # sirve | no_sirve | neutro | sin_clasificar
     razon: str  # corta; se muestra en la ventana del monitor y nunca se guarda
-    fuente: str  # privado | neutro | regla | distraccion | sin_informacion | instrucciones | llm | cache | fallo | sin_llm
+    fuente: str  # privado | neutro | regla | distraccion | sin_informacion | instrucciones | llm | cache | fallo | limite
 
 
 def perfil_clasificador(env: dict[str, str] | None = None) -> proveedor.Perfil | None:
@@ -328,6 +350,7 @@ class Clasificador:
         self._fallos: dict[tuple[str, str], float] = {}
         self._persona: dict[str, str] = {}
         self._mtime: float | None = None
+        self._recientes: deque[float] = deque()  # momento de cada consulta al LLM del último minuto
         self.llamadas_llm = 0
 
     def ignorar(self, v: Ventana) -> bool:
@@ -378,12 +401,18 @@ class Clasificador:
             return Clasificacion(app, "sin_clasificar", "el título no dice qué es", "sin_informacion")
         if parece_instruccion(v.titulo):
             return Clasificacion(app, "no_sirve", "el título trae instrucciones", "instrucciones")
-        clave = (app, texto)
+        clave = (app, clave_titulo(texto))
         if clave in self._cache:
             categoria, razon = self._cache[clave]
             return Clasificacion(app, categoria, razon, "cache")
-        if clave in self._fallos and self._reloj() - self._fallos[clave] < REINTENTAR_FALLO_S:
+        ahora = self._reloj()
+        if clave in self._fallos and ahora - self._fallos[clave] < REINTENTAR_FALLO_S:
             return Clasificacion(app, "sin_clasificar", "no se pudo clasificar", "fallo")
+        while self._recientes and ahora - self._recientes[0] >= 60:
+            self._recientes.popleft()
+        if len(self._recientes) >= MAX_LLM_POR_MINUTO:
+            return Clasificacion(app, "sin_clasificar", "muchas consultas en este minuto", "limite")
+        self._recientes.append(ahora)
         self.llamadas_llm += 1
         try:
             categoria, razon = self._llm(self.meta, app, texto)
@@ -422,7 +451,10 @@ class Foto:
 
 class SeguidorVentanas:
     """Une las lecturas en tramos. Una ventana cuenta si dura al menos MINIMO_S; las más cortas no
-    cortan el tramo actual. Dos tramos seguidos con la misma app y categoría se unen."""
+    cortan el tramo actual. Dos tramos seguidos con la misma app y categoría se unen.
+
+    La ventana nueva se sigue por su proceso, no por su título exacto: si el título cambia en cada lectura
+    (temporizador, contador de mensajes, spinner de una terminal), la cuenta de MINIMO_S no vuelve a empezar."""
 
     def __init__(self, clasificador: Clasificador, minimo_s: float = MINIMO_S):
         self.clasificador = clasificador
@@ -440,8 +472,9 @@ class SeguidorVentanas:
             self._candidata = None
             self.actual.fin = t
             return []
-        if v != self._candidata:
-            self._candidata, self._desde = v, t
+        if self._candidata is None or v.proceso != self._candidata.proceso:
+            self._desde = t
+        self._candidata = v  # se clasifica el título más reciente
         if t - self._desde < self.minimo_s:
             if self.actual is not None:
                 self.actual.fin = t  # mientras la nueva no cuente, el tiempo sigue en la actual

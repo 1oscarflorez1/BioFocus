@@ -58,7 +58,7 @@ Abre `.env` con un editor de texto y llénalo. Nunca lo subas al repositorio (gi
 | `LLM_FALLBACK_API_KEY` | La llave del respaldo | |
 | `LLM_FALLBACK_MODEL` | Opcional. Vacío usa el verificado | `gemini-3.5-flash` |
 | `OFFLINE_MODE` | `true` para usar solo Ollama local | `false` |
-| `LLM_CLASIFICADOR_PROVIDER` | Opcional. Quién clasifica los títulos ambiguos del monitor. Vacío usa Groq con la llave de Groq que haya en `.env`. `ollama` lo hace local | `ollama` |
+| `LLM_CLASIFICADOR_PROVIDER` | Opcional. Quién clasifica los títulos ambiguos del monitor. Vacío usa Groq con la llave de Groq que haya en `.env`. `ollama` lo hace local. `ninguno` no usa LLM: lo ambiguo queda sin clasificar | `ollama` |
 | `LLM_CLASIFICADOR_MODEL` | Opcional. Vacío usa `openai/gpt-oss-20b` en Groq | |
 
 Sin respaldo configurado, el respaldo es otro modelo del mismo proveedor. Para revisar qué modelos responden con herramientas en tu cuenta:
@@ -111,7 +111,7 @@ Si lanzar el monitor desde la app da problemas, inícialo desde la terminal; la 
 - **Teclas** en la ventana de la cámara: `c` recalibra y `q` termina. También termina al cerrar esa ventana, con «Terminar sesión» en la app o con Ctrl+C. En todos los casos escribe `fin_sesion` y cierra limpio.
 - **Calibración:** los primeros 5 s, sentado derecho y con los hombros a la vista. Se descarta el primer segundo.
 - **Postura:** el número es (y medio de los hombros − y de la nariz) / ancho de los hombros. Hay alerta si cae más de 25 % bajo tu línea base durante 20 s, y se rearma al volver a −10 %. Si no ve nariz y hombros, dice «no te veo» y no alerta.
-- **Ventana:** se lee cada 2 s y cuenta si dura al menos 5 s. Las reglas fijas están en `producto/reglas.json` (privados, neutros y distracciones fijas) y las reglas que apruebas en el coach, en `data/reglas.json`. Lo ambiguo lo decide Groq según la meta.
+- **Ventana:** se lee cada 2 s y cuenta cuando llevas al menos 5 s fuera de la anterior, aunque el título cambie mientras tanto (un temporizador, un contador de mensajes). Las reglas fijas están en `producto/reglas.json` (privados, neutros y distracciones fijas) y las reglas que apruebas en el coach, en `data/reglas.json`. Lo ambiguo lo decide Groq según la meta, con dos límites: una consulta por título equivalente (los que solo cambian en números o símbolos comparten la respuesta) y máximo 6 consultas por minuto; pasado ese tope, la ventana queda sin clasificar.
 - **Distracción:** hay alerta tras 60 s seguidos en ventanas que no sirven.
 - **Entre alertas del mismo tipo:** pasan al menos 5 min.
 
@@ -172,7 +172,7 @@ Si se alcanza un límite, la respuesta lo dice. El porqué de cada uno está com
 .venv\Scripts\python -m unittest discover -s tests
 ```
 
-Son 62 pruebas y no usan red, llaves ni cámara:
+Son 72 pruebas y no usan red, llaves ni cámara:
 - un servidor falso en `127.0.0.1` imita al proveedor;
 - el monitor se prueba con números de postura y un LLM falso.
 
@@ -203,6 +203,8 @@ El primer comando muestra la respuesta esperada de cada uno de los 12 casos de `
 | `producto/verificar_modelos.py` | Prueba qué modelos del proveedor sirven con herramientas |
 | `docs/PLAN-M2.md` | Plan del Momento 2 con su criterio de sí o no |
 | `docs/decisiones/m2-decisiones.md` | Decisiones del Momento 2 y la renegociación del LLM en la nube |
+| `docs/PLAN-M3.md` | Plan del Momento 3 y hallazgos de la auditoría del 2026-11-11 |
+| `docs/decisiones/m3-decisiones.md` | Decisiones del Momento 3 y cómo se verificó cada corrección |
 
 ## Si algo falla
 | Mensaje | Qué hacer |
@@ -214,6 +216,7 @@ El primer comando muestra la respuesta esperada de cada uno de los 12 casos de `
 | Un modelo deja de existir (404) | Corre `producto\verificar_modelos.py` y fija `LLM_MODEL` |
 | "No pude abrir la cámara 0" | Cierra otras apps que usen la cámara (Teams, Zoom, Cámara de Windows) o prueba con `--camara 1`. Plan B: un video de `grabaciones/` |
 | "No encuentro el modelo" o "no tiene el SHA-256" | Ver Instalación: copia o descarga `pose_landmarker_lite.task` a `producto\modelos\` |
-| "Ya hay una sesión en curso" | Termínala con `q` o desde la app. Si el monitor se cayó, se cierra solo a los 15 s sin señales |
+| «Cámara sin imagen: reintentando…» | El monitor espera hasta 10 s y reabre la cámara una vez. Si no vuelve, cierra la sesión con «la cámara dejó de entregar cuadros»: cierra otras apps que usen la cámara y empieza de nuevo |
+| "Ya hay una sesión en curso" | Termínala con `q` o desde la app. Si el monitor se cayó, se cierra solo a los 15 s sin señales y conserva el tramo de ventana que estaba en curso |
 | El monitor no arranca desde la app | Mira `data\monitor.log`, o inícialo desde la terminal (ver «Sesión en vivo desde la terminal») |
 | Las ventanas salen «sin clasificar» | Groq no respondió en 5 s o no hay llave de Groq en `.env`; las reglas fijas siguen funcionando |

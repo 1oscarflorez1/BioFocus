@@ -51,6 +51,39 @@ def cerrar_sesion(con: sqlite3.Connection, sesion_id: int, fin: datetime, motivo
     return True
 
 
+def _guardar_tramo_en_curso(con: sqlite3.Connection, sesion_id: int, hasta: datetime) -> bool:
+    """Guarda como evento el tramo de ventana que estaba abierto, que solo vive en estado_monitor.
+
+    El monitor escribe cada tramo al cerrarlo; si se cae, el último se perdía (una sesión entera en una sola
+    ventana quedaba en 0 minutos). Aquí no hay título que guardar: estado_monitor solo tiene app y categoría.
+    """
+    e = con.execute(
+        "SELECT app, categoria, ventana_desde FROM estado_monitor WHERE sesion_id = ?", (sesion_id,)
+    ).fetchone()
+    if e is None or not (e["app"] and e["categoria"] and e["ventana_desde"]):
+        return False
+    duracion = int((hasta - _dt(e["ventana_desde"])).total_seconds())
+    if duracion <= 0:
+        return False
+    datos.agregar_evento(con, sesion_id, e["ventana_desde"], "ventana", app=e["app"], categoria=e["categoria"],
+                         duracion_s=duracion)
+    return True
+
+
+def cerrar_sin_monitor(con: sqlite3.Connection, sesion_id: int, motivo: str) -> bool:
+    """Cierra una sesión cuyo monitor ya no responde: en su última señal de vida y con el tramo que estaba en curso."""
+    fila = con.execute(
+        "SELECT s.inicio, s.fin, e.actualizado FROM sesiones s LEFT JOIN estado_monitor e ON e.sesion_id = s.id "
+        "WHERE s.id = ?",
+        (sesion_id,),
+    ).fetchone()
+    if fila is None or fila["fin"] is not None:
+        return False
+    ultima = _dt(fila["actualizado"] or fila["inicio"])
+    _guardar_tramo_en_curso(con, sesion_id, ultima)
+    return cerrar_sesion(con, sesion_id, ultima, motivo)
+
+
 def cerrar_huerfanas(con: sqlite3.Connection, ahora: datetime) -> int:
     """Cierra las sesiones reales abiertas cuyo monitor dejó de dar señales (se cayó o se apagó el equipo)."""
     filas = con.execute(
@@ -61,7 +94,7 @@ def cerrar_huerfanas(con: sqlite3.Connection, ahora: datetime) -> int:
     for f in filas:
         ultima = _dt(f["actualizado"] or f["inicio"])
         if (ahora - ultima).total_seconds() > LATIDO_VIEJO_S:
-            cerradas += cerrar_sesion(con, f["id"], ultima, "cerrada sin monitor: dejó de dar señales")
+            cerradas += cerrar_sin_monitor(con, f["id"], "cerrada sin monitor: dejó de dar señales")
     con.commit()
     return cerradas
 

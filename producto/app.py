@@ -103,7 +103,8 @@ def _ultimas_lineas(n: int = 8) -> str:
 def iniciar_monitor(meta: str, duracion: int, demo: bool, video: Path | None) -> str | None:
     """Lanza el monitor como proceso aparte y espera a que registre la sesión. Devuelve un error o None."""
     LOG_MONITOR.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [sys.executable, str(MONITOR), "--meta", meta, "--duracion", str(duracion)]
+    # --meta=valor, en un solo argumento: una meta que empieza por guion («-repaso») no se toma por otra opción.
+    cmd = [sys.executable, str(MONITOR), f"--meta={meta}", "--duracion", str(duracion)]
     if demo:
         cmd.append("--modo-demo")
     if video:
@@ -155,8 +156,8 @@ def terminar_monitor(sesion_id: int) -> str | None:
                 return None
         except OSError:
             pass
-    with _bd() as con:
-        vivo.cerrar_sesion(con, sesion_id, datetime.now(), "cerrada desde la app: el monitor no respondió")
+    with _bd() as con:  # en su última señal de vida, guardando el tramo de ventana que estaba en curso
+        vivo.cerrar_sin_monitor(con, sesion_id, "cerrada desde la app: el monitor no respondió")
         con.commit()
     return "El monitor no respondió, así que cerré la sesión desde la app. Si su ventana sigue abierta, ciérrala con q."
 

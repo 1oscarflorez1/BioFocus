@@ -114,6 +114,27 @@ class TestPostura(unittest.TestCase):
         self.assertEqual(monitor.DEMO, monitor.Tiempos(5, 10, 30))
 
 
+class TestCorteCamara(unittest.TestCase):
+    def test_espera_reabre_una_vez_y_se_rinde_al_pasar_el_plazo(self):
+        c = monitor.CorteCamara(max_s=10)
+        self.assertEqual([c.fallo(t) for t in (100.0, 101.0, 104.9)], ["esperar"] * 3)
+        self.assertEqual(c.fallo(105.0), "reabrir")
+        self.assertEqual([c.fallo(t) for t in (105.1, 109.9)], ["esperar"] * 2, "solo se reabre una vez")
+        self.assertEqual(c.fallo(110.0), "rendirse")
+
+    def test_un_cuadro_bueno_termina_el_corte(self):
+        c = monitor.CorteCamara(max_s=10)
+        self.assertIsNone(c.cuadro_ok(), "sin corte en curso")
+        c.fallo(100.0)
+        c.fallo(106.0)
+        self.assertEqual(c.cuadro_ok(), 100.0)
+        self.assertEqual((c.desde, c.reabierta), (None, False))
+        self.assertEqual([c.fallo(t) for t in (200.0, 205.0)], ["esperar", "reabrir"], "el corte siguiente empieza de cero")
+
+    def test_el_plazo_es_menor_que_el_de_monitor_caido(self):
+        self.assertLess(monitor.CORTE_CAMARA_MAX_S, vivo.LATIDO_VIEJO_S)
+
+
 class TestDistraccion(unittest.TestCase):
     def test_alerta_a_los_10_s_y_cooldown(self):
         d = monitor.Distraccion(monitor.DEMO)
@@ -247,6 +268,28 @@ class TestClasificador(Base):
         self.respuesta, self.reloj[0] = ("no_sirve", "otro tema"), v.REINTENTAR_FALLO_S + 1
         self.assertEqual(c.clasificar(vent).categoria, "no_sirve")
 
+    def test_titulos_que_solo_cambian_en_numeros_o_simbolos_comparten_una_consulta(self):
+        c = self.clasificador()
+        titulos = [
+            "24:59 Pomodoro de cálculo - Google Chrome",
+            "24:57 Pomodoro de cálculo - Google Chrome",
+            "✳ (3) 24:55 Pomodoro de cálculo - Google Chrome",
+        ]
+        fuentes = [c.clasificar(ventana(t)).fuente for t in titulos]
+        self.assertEqual(fuentes, ["llm", "cache", "cache"])
+        self.assertEqual([p[2] for p in self.preguntas], ["24:59 Pomodoro de cálculo"], "al LLM va el título tal cual, una vez")
+        self.assertNotEqual(v.clave_titulo("Capítulo 3 de álgebra"), v.clave_titulo("Capítulo 3 de cálculo"))
+
+    def test_tope_de_consultas_al_llm_por_minuto(self):
+        c = self.clasificador()
+        titulos = [f"Artículo {letra} sobre series de Fourier - Google Chrome" for letra in "abcdefgh"]
+        resultados = [c.clasificar(ventana(t)) for t in titulos]
+        self.assertEqual([r.fuente for r in resultados], ["llm"] * v.MAX_LLM_POR_MINUTO + ["limite"] * 2)
+        self.assertEqual(resultados[-1].categoria, "sin_clasificar", "pasado el tope no alerta ni inventa")
+        self.assertEqual(len(self.preguntas), v.MAX_LLM_POR_MINUTO)
+        self.reloj[0] += 61  # al minuto siguiente vuelve a consultar
+        self.assertEqual(c.clasificar(ventana(titulos[-1])).fuente, "llm")
+
     def test_el_llm_real_tiene_limite_total_de_tiempo(self):
         def lento(*a, **k):
             time.sleep(2)
@@ -335,6 +378,21 @@ class TestTramos(unittest.TestCase):
         self.assertEqual(self.s.racha_no_sirve, 0, "YouTube y luego Instagram: la racha no sirve sigue desde el inicio")
         self.leer([(24, ventana("b.py", "code.exe")), (30, ventana("b.py", "code.exe"))])
         self.assertIsNone(self.s.racha_no_sirve)
+
+    def test_una_ventana_cuyo_titulo_cambia_en_cada_lectura_igual_cuenta(self):
+        yt = ventana("video", "yt")
+        self.leer([(0, yt), (6, yt)])
+        self.assertEqual(self.s.racha_no_sirve, 0)
+        # Vuelve a trabajar en una ventana cuyo título cambia cada 2 s (temporizador, spinner de la terminal).
+        cerrados = self.leer([(t, ventana(f"tarea {t}", "code.exe")) for t in range(8, 20, 2)])
+        self.assertEqual([(c.clase.app, c.inicio, c.fin) for c in cerrados], [("YouTube", 0, 8)])
+        self.assertEqual((self.s.actual.clase.app, self.s.actual.inicio), ("VS Code", 8))
+        self.assertIsNone(self.s.racha_no_sirve, "al volver al trabajo, la racha de distracción se corta")
+
+    def test_el_titulo_de_la_ventana_actual_puede_cambiar_sin_partir_el_tramo(self):
+        cerrados = self.leer([(t, ventana(f"{t} s - apuntes", "code.exe")) for t in range(0, 30, 2)])
+        self.assertEqual(cerrados, [])
+        self.assertEqual((self.s.actual.clase.app, self.s.actual.inicio, self.s.actual.fin), ("VS Code", 0, 28))
 
     def test_ignorada_no_cuenta(self):
         code = ventana("a.py", "code.exe")
@@ -426,6 +484,44 @@ class TestBaseEnVivo(unittest.TestCase):
             self.assertEqual(vivo.cerrar_huerfanas(con, ahora + timedelta(seconds=20)), 1)
             fila = con.execute("SELECT fin FROM sesiones WHERE id = ?", (sid,)).fetchone()
             self.assertEqual(fila["fin"], (ahora - timedelta(seconds=1)).strftime(F))
+
+    def test_al_cerrar_sin_monitor_se_guarda_el_tramo_en_curso(self):
+        ahora = datetime(2026, 11, 11, 10, 0, 0)
+        F = datos.FORMATO
+        with closing(datos.conectar(self.bd)) as con:
+            sid = datos.crear_sesion(con, (ahora - timedelta(hours=2)).strftime(F), None, "meta", 120)
+            con.execute(  # dos horas en una sola ventana: el tramo sigue abierto y solo vive en estado_monitor
+                "INSERT INTO estado_monitor (sesion_id, pid, modo_demo, actualizado, postura, app, categoria, ventana_desde) "
+                "VALUES (?, 1, 0, ?, 'bien', 'VS Code', 'sirve', ?)",
+                (sid, (ahora - timedelta(seconds=60)).strftime(F), (ahora - timedelta(hours=2)).strftime(F)),
+            )
+            con.commit()
+            self.assertEqual(vivo.cerrar_huerfanas(con, ahora), 1)
+            r = vivo.resumen(con, sid, ahora)
+            self.assertEqual(r["minutos_por_categoria"]["sirve"], 119.0, "las 2 h en una sola ventana no se pierden")
+            self.assertEqual(r["transcurrido_s"], 119 * 60, "la sesión cierra en la última señal de vida")
+            self.assertFalse(vivo.cerrar_sin_monitor(con, sid, "otra vez"), "cerrar dos veces no hace nada")
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM eventos WHERE tipo = 'ventana'").fetchone()[0], 1)
+
+    def test_el_monitor_no_duplica_el_tramo_que_guardo_el_cierre_sin_monitor(self):
+        r = monitor.Registro(self.bd, "Repasar cálculo", 3, modo_demo=True)
+        t = time.time()
+        foto = v.Foto("VS Code", "sirve", "", t - 40, None)
+        r.latido(t - 20, monitor.Postura(monitor.DEMO, 0), foto)  # última señal de vida: hace 20 s
+        with closing(datos.conectar(self.bd)) as app:  # la app lo da por caído y cierra la sesión
+            self.assertEqual(vivo.cerrar_huerfanas(app, datetime.fromtimestamp(t)), 1)
+        # El monitor despierta y quiere guardar el mismo tramo, ahora más largo: no se escribe otra vez.
+        r.tramo(v.Tramo(ventana("x", "code.exe"), v.Clasificacion("VS Code", "sirve", "", "llm"), t - 40, t))
+        r.cerrar(t, "terminada desde la app")
+        with closing(datos.conectar_lectura(self.bd)) as con:
+            duraciones = [f[0] for f in con.execute("SELECT duracion_s FROM eventos WHERE tipo = 'ventana'")]
+        self.assertEqual(duraciones, [20])
+
+    def test_una_meta_que_empieza_por_guion_no_se_toma_por_opcion(self):
+        # La app pasa --meta=valor en un solo argumento; con «--meta -repaso», argparse lo tomaba por otra opción.
+        with mock.patch.object(monitor, "correr", return_value=0) as correr:
+            self.assertEqual(monitor.main(["--meta=-repaso", "--duracion", "3"]), 0)
+        self.assertEqual(correr.call_args.args[0].meta, "-repaso")
 
     def test_reales_y_demo_por_separado(self):
         with closing(datos.conectar(self.bd)) as con:
