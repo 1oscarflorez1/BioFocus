@@ -42,11 +42,18 @@ BASES = {
 MODELOS_POR_DEFECTO = {
     "groq": ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"],
     "gemini": ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"],
-    "ollama": ["qwen2.5:3b", "llama3.2:3b"],  # sin verificar: este equipo no tiene Ollama
+    # Medidos el 2026-11-18 con producto/evals/medir_local.py en este equipo (Ollama 0.40.16, CPU):
+    # qwen2.5:3b acertó 3/3 preguntas del coach con herramientas (14 a 45 s) y 6/7 títulos (3,2 s);
+    # qwen2.5:7b, 3/3 y 7/7, pero al doble de tiempo (23 a 89 s; 4,4 s por título, al borde de los 5 s).
+    "ollama": ["qwen2.5:3b", "qwen2.5:7b"],
 }
 
 ESPERAS_429_S = (1, 2, 4)
 TIMEOUT_S = 20
+# Límite por llamada cuando el modelo corre en este equipo (Ollama). Por qué 60 s: en la medición del
+# 2026-11-18 la llamada más lenta del coach con qwen2.5:3b tardó 26 s, más que los 20 s de la nube; 60 s deja
+# el doble de margen. En local no hay cuota ni costo, y es el modo sin internet (plan B).
+TIMEOUT_LOCAL_S = 60
 MAX_TOKENS_RESPUESTA = 900
 TEMPERATURA = 0.2
 # Cloudflare (delante de Groq) rechaza con 403, error 1010, el User-Agent por defecto de urllib.
@@ -318,6 +325,7 @@ def llamar_llm(
             fallos.append(_Fallo("config", "falta la llave", perfil))
             continue
         forzar_429 = inter.forzar_429 == "todos" or (inter.forzar_429 == "principal" and perfil.nombre == "principal")
+        limite_s = max(timeout_s, TIMEOUT_LOCAL_S) if perfil.proveedor == "ollama" else timeout_s
         for intento in range(len(ESPERAS_429_S) + 1):
             fallo: _Fallo | None = None
             with traza.span("llm", proveedor=perfil.proveedor, modelo=perfil.modelo, intento=intento + 1) as span:
@@ -328,7 +336,7 @@ def llamar_llm(
                     if forzar_429:
                         span["forzado"] = "429"
                         raise _Fallo("429", "429 forzado por interruptor de prueba", perfil, 429)
-                    datos = _post_con_limite(perfil, {**cuerpo, "model": perfil.modelo, "messages": _adaptar(mensajes, perfil)}, timeout_s)
+                    datos = _post_con_limite(perfil, {**cuerpo, "model": perfil.modelo, "messages": _adaptar(mensajes, perfil)}, limite_s)
                     try:
                         mensaje = datos["choices"][0]["message"]
                     except (KeyError, IndexError, TypeError):
@@ -362,7 +370,7 @@ def llamar_llm(
                     error="timeout",
                     perfil=perfil.etiqueta,
                     texto_error=(
-                        f"El proveedor de IA ({perfil.etiqueta}) no respondió en {timeout_s:g} s, así que corté la espera. "
+                        f"El proveedor de IA ({perfil.etiqueta}) no respondió en {limite_s:g} s, así que corté la espera. "
                         "Tu sesión sigue abierta: vuelve a preguntar en un momento."
                     ),
                 )

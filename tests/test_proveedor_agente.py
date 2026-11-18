@@ -160,6 +160,17 @@ class TestProveedor(Base):
         self.assertFalse(r.ok)
         self.assertEqual(r.error, "timeout")
 
+    def test_el_modelo_local_tiene_su_propio_limite_de_tiempo(self):
+        s = self.servidor([{"dormir": 0.6, **texto("tarde pero llega")}, {"dormir": 0.6, **texto("tarde")}])
+        url = s.perfiles[0].base_url
+        local = proveedor.Perfil("principal", "ollama", "qwen2.5:3b", url, "")
+        with mock.patch.object(proveedor, "TIMEOUT_LOCAL_S", 2):
+            r = proveedor.llamar_llm([{"role": "user", "content": "hola"}], None, perfiles=[local], timeout_s=0.3)
+            self.assertTrue(r.ok, "en local el límite es TIMEOUT_LOCAL_S, no los 0,3 s de la nube")
+            nube = proveedor.llamar_llm([{"role": "user", "content": "hola"}], None, perfiles=[s.perfiles[0]], timeout_s=0.3)
+        self.assertEqual(nube.error, "timeout")
+        self.assertEqual(proveedor.MODELOS_POR_DEFECTO["ollama"][0], "qwen2.5:3b")
+
     def test_gemini_recibe_firma_en_llamadas_de_otro_proveedor(self):
         s = self.servidor([texto("ok")])
         mensajes = [

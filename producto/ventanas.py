@@ -341,6 +341,14 @@ def llm_real(perfil: proveedor.Perfil | None, timeout_s: float = TIMEOUT_LLM_S) 
     return preguntar
 
 
+def calentar(perfil: proveedor.Perfil) -> None:
+    """Carga el modelo local en segundo plano al empezar la sesión. Por qué: la primera consulta a Ollama
+    tardó 9,7 s (3B) y 16,5 s (7B) en la medición del 2026-11-18, más que los 5 s del clasificador; sin esto, el
+    primer título ambiguo quedaba sin clasificar. No bloquea al monitor y no manda ningún título."""
+    mensajes = [{"role": "user", "content": "ok"}]
+    _HILOS_LLM.submit(proveedor.llamar_llm, mensajes, None, perfiles=[perfil], timeout_s=60, opciones={"max_tokens": 1})
+
+
 class Clasificador:
     def __init__(
         self,
@@ -354,7 +362,12 @@ class Clasificador:
         self.meta = meta
         self.reglas = reglas or cargar_reglas_fijas()
         self.ruta_persona = Path(ruta_reglas_persona)
-        self._llm = llm if llm is not None else llm_real(perfil_clasificador())
+        if llm is None:
+            perfil = perfil_clasificador()
+            llm = llm_real(perfil)
+            if perfil is not None and perfil.proveedor == "ollama":
+                calentar(perfil)
+        self._llm = llm
         self._reloj = reloj
         self._cache: dict[tuple[str, str], tuple[str, str]] = {}
         self._fallos: dict[tuple[str, str], float] = {}
