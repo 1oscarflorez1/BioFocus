@@ -67,6 +67,18 @@ Sin respaldo configurado, el respaldo es otro modelo del mismo proveedor. Para r
 .venv\Scripts\python producto\verificar_modelos.py
 ```
 
+## Modo sin internet (Ollama)
+Con [Ollama](https://ollama.com) instalado, BioFocus funciona sin que nada salga del equipo: el coach y el clasificador usan un modelo local.
+
+```powershell
+ollama pull qwen2.5:3b
+```
+
+Luego pon `OFFLINE_MODE=true` en `.env` y reinicia la app.
+- El modelo lo eligió la medición del 2026-11-18 en este equipo (`producto\evals\medir_local.py`): el clasificador tarda unos 3 s por título.
+- El coach tarda entre 15 y 45 s por pregunta en CPU, y tiene un límite de 60 s por llamada en vez de 20.
+- Si también tienes `qwen2.5:7b`, queda de respaldo.
+
 ## Datos de prueba
 ```powershell
 .venv\Scripts\python producto\generar_datos_demo.py

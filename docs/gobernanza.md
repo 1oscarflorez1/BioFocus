@@ -19,7 +19,7 @@ Lo demás son reglas y código, sin modelo: la postura con MediaPipe, las alerta
 | Categoría de una ventana ambigua (`sirve` o `no_sirve`) | El modelo (`openai/gpt-oss-20b` en Groq, o local) | `ventanas.py:298` (prompt) y `ventanas.py:314` (solo acepta esas dos) | Minutos por categoría y, tras 60 s seguidos en `no_sirve`, la alerta de distracción |
 | Alerta de distracción | Regla: 60 s seguidos en `no_sirve`, 5 min entre alertas | `monitor.py`, clase `Distraccion` | Cartel, sonido y un evento `alerta_distraccion` |
 
-El clasificador no puede escribir, borrar ni llamar a nada. Su respuesta se valida contra un conjunto cerrado (`ventanas.py:314`) y, si el título trae instrucciones, nunca sale como `sirve` (`ventanas.py:389`).
+El clasificador no puede escribir, borrar ni llamar a nada. Su respuesta se valida contra un conjunto cerrado (`ventanas.py:314`) y, si el título trae instrucciones, nunca sale como `sirve` (`ventanas.py:402`).
 
 **El coach.** El modelo elige sola cuál de estas herramientas llamar y con qué argumentos. El código valida cada argumento antes de ejecutar (`herramientas.py`, funciones `_v_*`).
 
@@ -82,7 +82,7 @@ Límites que el coach no puede saltarse: 6 vueltas del bucle (`agente.py:34`), 1
 | Base de datos | Las herramientas devuelven cifras agregadas, horas, nombres de app (alfabeto cerrado, máximo 30 caracteres: `herramientas.py:188`) y categorías. Nunca la meta (`datos.py:38`) ni títulos | El resultado de cada herramienta | Groq, `openai/gpt-oss-120b`; Gemini de respaldo |
 | Chat | Se recorta a 1 000 caracteres y se reenvían las dos últimas preguntas con su respuesta (`agente.py:67`) | La pregunta, tal como la escribió la persona | El mismo del coach |
 
-Con `OFFLINE_MODE=true`, o con `ollama` como proveedor, nada de esto sale del equipo (`proveedor.py:138` y `ventanas.py:278`; bloque H del plan).
+Con `OFFLINE_MODE=true`, o con `ollama` como proveedor, nada de esto sale del equipo (`proveedor.py:145` y `ventanas.py:278`; bloque H del plan).
 
 ## 5. ¿Qué hacemos si el sistema causa un daño?
 

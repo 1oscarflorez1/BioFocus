@@ -9,7 +9,7 @@ Presentación: 2026-11-19, en vivo, con el orden sorteado el mismo día. La hace
 4. Abrir la app con doble clic en `BioFocus.bat`, con el navegador en pantalla completa. Dejar en el formulario duración 3 y modo demo encendido: la app los recuerda, y la persona del público solo escribe la meta.
 5. Tener abiertos `docs/seguridad.md`, `docs/gobernanza.md` y `docs/decisiones/semana14.md`, y en VS Code `agente.py:332`, `herramientas.py:494` y `app.py:524`.
 6. Cerrar el correo, el banco y los chats: los títulos ambiguos van a Groq.
-7. Plan B listo: `grabaciones/encorvado.mp4` en el selector «Imagen». Si el bloque H se hace, también Ollama con su modelo y `OFFLINE_MODE=true` en una copia de `.env`.
+7. Plan B listo: `grabaciones/encorvado.mp4` en el selector «Imagen», y Ollama corriendo con `qwen2.5:3b` (`ollama list`). Para el modo sin internet solo hay que cambiar `OFFLINE_MODE` en `.env`.
 
 ## Guion
 | Min | Parte | Qué se muestra | Qué se dice |
@@ -25,7 +25,7 @@ Presentación: 2026-11-19, en vivo, con el orden sorteado el mismo día. La hace
 | Si falla… | Hacer |
 |---|---|
 | La cámara | En «Imagen», elegir `encorvado.mp4`: la alerta de postura sale a los 16 s. La distracción se prueba igual, con YouTube en vivo |
-| Internet (coach y clasificador) | Con Ollama instalado (bloque H): `OFFLINE_MODE=true` y todo queda local; es además la pata de salida cerrada. Sin Ollama: `LLM_CLASIFICADOR_PROVIDER=ninguno`, y la cámara, las reglas y las alertas siguen; el coach se muestra con la grabación y con las trazas guardadas en `producto/evals/resultados/` |
+| Internet (coach y clasificador) | `OFFLINE_MODE=true` en `.env` y reiniciar la app: Ollama con `qwen2.5:3b`, ya instalado y medido (34/36). Todo queda en el equipo, que es además la pata de salida cerrada. El coach tarda unos 15 s por pregunta: hacerle una pregunta antes para que cargue el modelo. Si Ollama también falla: `LLM_CLASIFICADOR_PROVIDER=ninguno`, y la cámara, las reglas y las alertas siguen; el coach se muestra con las trazas guardadas en `producto/evals/resultados/` |
 | Groq da 429 | El respaldo (Gemini) responde solo, tras unos 7 s. Si no, el mensaje honesto también es parte de la demo (`docs/decisiones/m2-errores.md`) |
 | La app no lanza el monitor | Lanzarlo desde la terminal: `producto\monitor.py --meta "…" --duracion 3 --modo-demo`, y recargar la página |
 
@@ -49,10 +49,10 @@ Presentación: 2026-11-19, en vivo, con el orden sorteado el mismo día. La hace
 | `Postura.actualizar` (`monitor.py:128`) | Calibra la línea base con la mediana de 5 s y alerta si la mediana del último medio segundo cae más de 25 % durante 20 s. Se rearma al volver a −10 % o tras 10 s en «bien» |
 | `Pausas.actualizar` (`monitor.py:191`) | Salir de cuadro 60 s o más es una pausa; tras 50 min sin pausa, recuerda tomar una |
 | `CorteCamara.fallo` (`monitor.py:234`) | Sin imagen: espera, reabre la cámara a los 5 s y se rinde a los 10 s |
-| `SeguidorVentanas.observar` (`ventanas.py:477`) | Une las lecturas cada 2 s en tramos: una ventana cuenta a los 5 s, aunque su título cambie |
-| `Clasificador._clasificar` (`ventanas.py:394`) | Privado → neutro → regla aprobada → distracción fija → sin información → instrucciones → caché → LLM, con tope de 6 por minuto |
+| `SeguidorVentanas.observar` (`ventanas.py:490`) | Une las lecturas cada 2 s en tramos: una ventana cuenta a los 5 s, aunque su título cambie |
+| `Clasificador._clasificar` (`ventanas.py:407`) | Privado → neutro → regla aprobada → distracción fija → sin información → instrucciones → caché → LLM, con tope de 6 por minuto |
 | `responder` (`agente.py:239`) | El bucle del agente: hasta 6 vueltas y 12 000 tokens; valida cada llamada a herramienta y se detiene si pide `guardar_regla` |
 | `limpiar_salida` (`agente.py:131`) | Quita imágenes, enlaces, URLs y HTML de la respuesta antes de mostrarla |
 | `_origen` (`herramientas.py:166`) | El filtro SQL que separa sesiones reales de demo; lo fija la app, no el modelo |
-| `llamar_llm` (`proveedor.py:281`) | Una llamada con reintentos ante 429 (1, 2 y 4 s), respaldo y límite total de 20 s; nunca lanza excepciones |
+| `llamar_llm` (`proveedor.py:288`) | Una llamada con reintentos ante 429 (1, 2 y 4 s), respaldo y límite total de 20 s; nunca lanza excepciones |
 | `cerrar_sin_monitor` (`vivo.py:73`) | Cierra una sesión cuyo monitor se cayó, en su último latido, guardando el tramo de ventana en curso |

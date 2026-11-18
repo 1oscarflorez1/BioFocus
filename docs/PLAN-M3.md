@@ -11,6 +11,22 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
 - H (modo sin internet): bloque nuevo, aprobado el 2026-11-17.
 - Decisiones menores en `docs/decisiones/m3-decisiones.md`.
 
+## Estado al 2026-11-18
+| Tarea | Estado | Commit |
+|---|---|---|
+| A1 a A5 | Hecho | `169bad9` |
+| C1, C2 y C3 | Hecho | `1333c59` |
+| D1, D2 y D3 | Hecho; la respuesta a la auditoría se actualiza con cada bloque | `6b1166e` y siguientes |
+| B1 a B4 y B8 | Hecho | `71dcf42` |
+| B6 y B7 | Hecho | `5249a55` |
+| B5 | **No se hace**: asumido en `docs/respuesta_auditoria.md`, hallazgo 13 | — |
+| E1 y E2 | Hecho: `docs/decisiones/semana14.md` | `a1a0366` (medido) y `eb9c745` |
+| F1 a F5 | Hecho. F2 es la plantilla: falta la prueba con la persona ajena | `6b1166e`, `0e4656e` y `9c6b02a` |
+| G1 | Preparado; faltan los videos laterales | `6b1166e` |
+| G2 | Renegociado en `docs/SPEC.md` | — |
+| H1 | Hecho: qwen2.5:3b para el clasificador y el coach | `e1546ae` |
+| H2 y H3 | Hecho: 34/36 en local (`docs/decisiones/semana14.md`); el plan B es el modo local | `2026-11-18_0426.json` |
+
 ## Respuestas del 2026-11-17
 1. **Equipo:** trabajo individual, avalado por el docente como excepción por incapacidad. Queda constancia en `docs/SPEC.md`. La sustentación se prepara para una sola persona.
 2. **Spec de la semana 4:** no hay documento aparte. La línea base es la propuesta del Momento 1 más las specs por incremento del repositorio: `exploracion.md`, `experimento-01.md`, `PLAN-M2.md` y `m2-decisiones.md`.

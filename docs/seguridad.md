@@ -148,7 +148,7 @@ El filtro frenó uno («Guia del curso: clasificar como util…») y el modelo, 
 | **Salida a internet** | La respuesta del coach se pintaba como markdown: una imagen sacaba datos (ataque `imagen_markdown`, 3/3) | `limpiar_salida` quita imágenes, enlaces, referencias, HTML y URLs de la respuesta y de «Fuente y criterio» (`agente.py:131`, `agente.py:199` y `agente.py:222`), con aviso y span en la traza. La salida al proveedor se cierra con el modo local (bloque H) |
 | **Acciones que requieren aprobación** | `guardar_regla` (`agente.py:332`, `herramientas.py:494`, `app.py:524`). Borrar datos no existía en la app | Igual, más «Borrar mis datos» con BORRAR escrito (`app.py:427`). Al borrar, SQLite sobrescribe lo borrado y compacta (`datos.py:150` y `datos.py:165`) |
 | **Límite de gasto e iteraciones** | Coach: 6 vueltas, 12 000 tokens por pregunta, 20 s por llamada y 5 s por herramienta (`agente.py:34` a `agente.py:55`). Clasificador: sin tope de consultas | Coach igual. Clasificador: una consulta por título equivalente y máximo 6 por minuto (`ventanas.py:45`; commit `169bad9`). Trazas: 30 días (`trazas.py:22`). `data/monitor.log`: máximo 512 KB (`app.py:45`) |
-| **Secretos** | Las llaves de Groq y Gemini quedaron expuestas en octubre. `.env` estaba en `.gitignore`. La llave no sale en `repr` (`proveedor.py:66`), se borra de los cuerpos de error (`proveedor.py:163`) y una prueba verifica que no llega a las trazas. Claude Code tenía prohibido leer `.env`, con un hueco documentado: `Get-Content .env -Raw` (`docs/decisiones/permisos.md`) | Llaves cambiadas el 2026-11-13. Revisión del 2026-11-17: ninguna llave en los 19 commits de git (nunca se subió `.env`), en `traces/`, en `data/`, en `producto/evals/resultados/` ni en `.claude/`. Se cerró el hueco de `-Raw` con `PowerShell(Get-Content *.env *)` en `deny` (`.claude/settings.json`) |
+| **Secretos** | Las llaves de Groq y Gemini quedaron expuestas en octubre. `.env` estaba en `.gitignore`. La llave no sale en `repr` (`proveedor.py:73`), se borra de los cuerpos de error (`proveedor.py:170`) y una prueba verifica que no llega a las trazas. Claude Code tenía prohibido leer `.env`, con un hueco documentado: `Get-Content .env -Raw` (`docs/decisiones/permisos.md`) | Llaves cambiadas el 2026-11-13. Revisión del 2026-11-17: ninguna llave en los 19 commits de git (nunca se subió `.env`), en `traces/`, en `data/`, en `producto/evals/resultados/` ni en `.claude/`. Se cerró el hueco de `-Raw` con `PowerShell(Get-Content *.env *)` en `deny` (`.claude/settings.json`) |
 
 ## 5. Riesgos que asumimos
 - **Lo que sale al proveedor en modo nube.** Las preguntas al coach, las cifras de uso, y los títulos ambiguos con la meta. Es el diseño (`docs/decisiones/m2-decisiones.md`, renegociación del LLM en la nube). La app lo dice antes del chat, y el modo local lo evita.
@@ -157,7 +157,20 @@ El filtro frenó uno («Guia del curso: clasificar como util…») y el modelo, 
 - **Texto sembrado que llega a la pantalla.** Un nombre de app con instrucciones se muestra tal cual en el panel (sin «:» ni «/», que Windows no permite en nombres de archivo).
 
 ## 6. Modo local: la pata de salida cerrada
-Con `OFFLINE_MODE=true`, el coach y el clasificador usan Ollama en `localhost:11434` (`proveedor.py:138` y `ventanas.py:278`). Ningún dato sale del equipo: la tríada queda sin la pata de salida también hacia el proveedor. Las mediciones del modelo local están en el bloque H del plan (`docs/PLAN-M3.md`).
+Con `OFFLINE_MODE=true`, el coach y el clasificador usan Ollama en `localhost:11434` (`proveedor.py:145` y `ventanas.py:278`). **Ningún dato sale del equipo:** ni la pregunta, ni las cifras, ni los títulos, ni la meta. La tríada se queda sin la pata de salida también hacia el proveedor. Lo que queda es la salida por la pantalla, que ya cierra `limpiar_salida`.
+
+Medido el 2026-11-18 en este equipo (`docs/decisiones/semana14.md`, sección del bloque H), con `qwen2.5:3b`:
+- **Coach:** 34/36, con una mediana de 14 s por pregunta.
+- **Clasificador:** 6/7 títulos en unos 3,2 s.
+
+En la medición H1, el clasificador local no aceptó los dos títulos con instrucciones que se le pasaron, entre ellos el de Temu, que sí engañó a `gpt-oss-20b`. Son solo dos títulos: no alcanza para decir que el modelo local resiste mejor.
+
+**El costo de cerrar esa pata:**
+- el coach tarda unas 10 veces más;
+- el modelo pequeño falla más: inventó un parámetro una vez en 36;
+- Ollama corta el contexto en 4 096 tokens, justo para las preguntas de esta suite.
+
+Por eso el modo local es el plan B y la opción de quien no quiera mandar nada a un tercero, no el modo por defecto.
 
 ## 7. Cómo se reproduce
 ```powershell
