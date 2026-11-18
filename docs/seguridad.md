@@ -49,8 +49,8 @@ Fecha: 2026-11-17. Formato de la semana 12: modelo de amenazas, tríada, ataque 
 ### ¿Qué acciones son irreversibles?
 | Acción | Antes | Después |
 |---|---|---|
-| `guardar_regla`: cambia de forma permanente cómo se clasifica una app | Exige el clic en «Aprobar» (`agente.py:318`, `herramientas.py:450`) | Igual: el ataque lo confirmó (sección 3) |
-| Borrar datos | No existía en la app; solo a mano, en la carpeta | «Borrar mis datos» exige escribir BORRAR (`app.py:380`). Una sesión en curso no se borra |
+| `guardar_regla`: cambia de forma permanente cómo se clasifica una app | Exige el clic en «Aprobar» (`agente.py:332`, `herramientas.py:494`) | Igual: el ataque lo confirmó (sección 3) |
+| Borrar datos | No existía en la app; solo a mano, en la carpeta | «Borrar mis datos» exige escribir BORRAR (`app.py:390`). Una sesión en curso no se borra |
 | Mandar un título o una pregunta al proveedor | No se puede deshacer | Igual. Se reduce con los privados, el tope de 6 consultas por minuto y el modo local |
 | Regenerar los datos demo | Borra solo lo marcado como demo (`datos.py:142`) | Igual |
 
@@ -64,10 +64,10 @@ Fecha: 2026-11-17. Formato de la semana 12: modelo de amenazas, tríada, ataque 
 
 **Qué pata se cerró y por qué.**
 - **En el coach, la salida por la pantalla.** Las otras dos no se pueden quitar sin quitar el producto: leer los datos de la persona es para lo que existe, y la persona va a seguir pegando texto de otros lados. La salida sí se puede cerrar en código, después del modelo, sin depender de que el modelo obedezca:
-  - `agente.limpiar_salida` quita imágenes, enlaces, referencias, HTML y direcciones web de la respuesta y de «Fuente y criterio» (`agente.py:120`, `agente.py:186` y `agente.py:209`);
+  - `agente.limpiar_salida` quita imágenes, enlaces, referencias, HTML y direcciones web de la respuesta y de «Fuente y criterio» (`agente.py:131`, `agente.py:199` y `agente.py:222`);
   - deja un aviso visible y un span `salida_limpiada` en la traza.
 
-  La regla 7 del prompt (`agente.py:84`) pide lo mismo al modelo, pero el control es el código.
+  La regla 7 del prompt (`agente.py:95`) pide lo mismo al modelo, pero el control es el código.
 - **La salida al proveedor no se cierra en modo nube:** es como funciona el coach. Se cierra con el modo local (`OFFLINE_MODE=true`, bloque H): con Ollama, ningún dato sale del equipo.
 - **En el clasificador, la salida ya estaba casi cerrada:** lo peor que logra un título es una categoría equivocada. Se endureció la pata de contenido no confiable (filtro y prompt) y se acepta el riesgo que queda (sección 5).
 
@@ -144,9 +144,9 @@ El filtro frenó uno («Guia del curso: clasificar como util…») y el modelo, 
 
 | Control | Antes (`169bad9`) | Después |
 |---|---|---|
-| **Permisos de la herramienta que toca datos** | Base en solo lectura (`mode=ro`, `datos.py:95`). Consultas fijas, sin SQL del modelo. La meta no sale (`datos.py:38`). Los nombres de app iban al modelo con solo un recorte a 40 caracteres | Igual, y los nombres de app pasan por un alfabeto cerrado (letras, números, espacio y `. + - ( )`) y un máximo de 30 caracteres, al guardarlos (`ventanas.py:258`) y al dárselos al modelo (`herramientas.py:171`) |
-| **Salida a internet** | La respuesta del coach se pintaba como markdown: una imagen sacaba datos (ataque `imagen_markdown`, 3/3) | `limpiar_salida` quita imágenes, enlaces, referencias, HTML y URLs de la respuesta y de «Fuente y criterio» (`agente.py:120`, `agente.py:186` y `agente.py:209`), con aviso y span en la traza. La salida al proveedor se cierra con el modo local (bloque H) |
-| **Acciones que requieren aprobación** | `guardar_regla` (`agente.py:318`, `herramientas.py:450`, `app.py:476`). Borrar datos no existía en la app | Igual, más «Borrar mis datos» con BORRAR escrito (`app.py:380`). Al borrar, SQLite sobrescribe lo borrado y compacta (`datos.py:150` y `datos.py:165`) |
+| **Permisos de la herramienta que toca datos** | Base en solo lectura (`mode=ro`, `datos.py:95`). Consultas fijas, sin SQL del modelo. La meta no sale (`datos.py:38`). Los nombres de app iban al modelo con solo un recorte a 40 caracteres | Igual, y los nombres de app pasan por un alfabeto cerrado (letras, números, espacio y `. + - ( )`) y un máximo de 30 caracteres, al guardarlos (`ventanas.py:258`) y al dárselos al modelo (`herramientas.py:188`) |
+| **Salida a internet** | La respuesta del coach se pintaba como markdown: una imagen sacaba datos (ataque `imagen_markdown`, 3/3) | `limpiar_salida` quita imágenes, enlaces, referencias, HTML y URLs de la respuesta y de «Fuente y criterio» (`agente.py:131`, `agente.py:199` y `agente.py:222`), con aviso y span en la traza. La salida al proveedor se cierra con el modo local (bloque H) |
+| **Acciones que requieren aprobación** | `guardar_regla` (`agente.py:332`, `herramientas.py:494`, `app.py:487`). Borrar datos no existía en la app | Igual, más «Borrar mis datos» con BORRAR escrito (`app.py:390`). Al borrar, SQLite sobrescribe lo borrado y compacta (`datos.py:150` y `datos.py:165`) |
 | **Límite de gasto e iteraciones** | Coach: 6 vueltas, 12 000 tokens por pregunta, 20 s por llamada y 5 s por herramienta (`agente.py:34` a `agente.py:55`). Clasificador: sin tope de consultas | Coach igual. Clasificador: una consulta por título equivalente y máximo 6 por minuto (`ventanas.py:45`; commit `169bad9`). Trazas: 30 días (`trazas.py:22`). `data/monitor.log`: máximo 512 KB (`app.py:43`) |
 | **Secretos** | Las llaves de Groq y Gemini quedaron expuestas en octubre. `.env` estaba en `.gitignore`. La llave no sale en `repr` (`proveedor.py:66`), se borra de los cuerpos de error (`proveedor.py:163`) y una prueba verifica que no llega a las trazas. Claude Code tenía prohibido leer `.env`, con un hueco documentado: `Get-Content .env -Raw` (`docs/decisiones/permisos.md`) | Llaves cambiadas el 2026-11-13. Revisión del 2026-11-17: ninguna llave en los 19 commits de git (nunca se subió `.env`), en `traces/`, en `data/`, en `producto/evals/resultados/` ni en `.claude/`. Se cerró el hueco de `-Raw` con `PowerShell(Get-Content *.env *)` en `deny` (`.claude/settings.json`) |
 
