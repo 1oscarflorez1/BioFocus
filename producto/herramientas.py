@@ -164,10 +164,15 @@ def _hay_demo(con, ini: str, fin: str) -> bool:
     return bool(fila[0])
 
 
+MAX_APP = 30
+_FUERA_DEL_ALFABETO_APP = re.compile(r"[^\w .+()\-]")
+
+
 def _app_segura(app: str | None) -> str:
-    """Los nombres de app son datos: se recortan y se quitan caracteres de control."""
-    limpio = "".join(c for c in (app or "(sin app)") if c.isprintable())
-    return limpio[:40]
+    """Los nombres de app son datos: alfabeto cerrado (letras, números, espacio y . + - ( )), sin caracteres de
+    control y máximo MAX_APP caracteres. Así no llevan markdown, comillas, «:» ni saltos de línea al modelo."""
+    limpio = _FUERA_DEL_ALFABETO_APP.sub("", "".join(c for c in (app or "") if c.isprintable()))
+    return " ".join(limpio.split())[:MAX_APP].strip() or "(sin app)"
 
 
 def _minutos(inicio: str, fin: str | None) -> int:

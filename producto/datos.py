@@ -145,3 +145,25 @@ def borrar_demo(con: sqlite3.Connection) -> int:
     con.execute("DELETE FROM eventos WHERE sesion_id IN (SELECT id FROM sesiones WHERE es_demo = 1)")
     con.execute("DELETE FROM sesiones WHERE es_demo = 1")
     return int(n)
+
+
+def borrar_reales(con: sqlite3.Connection) -> int:
+    """Borra las sesiones reales terminadas, con sus eventos, su estado en vivo y su meta. Es irreversible:
+    la app solo la llama después de que la persona escribe BORRAR. Una sesión en curso no se toca.
+
+    Con secure_delete, SQLite sobrescribe con ceros lo borrado; el VACUUM y el checkpoint posteriores (compactar)
+    sacan también las copias del archivo WAL. Devuelve cuántas sesiones borró."""
+    con.execute("PRAGMA secure_delete = ON")
+    filtro = "SELECT id FROM sesiones WHERE es_demo = 0 AND fin IS NOT NULL"
+    n = con.execute(f"SELECT COUNT(*) FROM ({filtro})").fetchone()[0]
+    con.execute(f"DELETE FROM eventos WHERE sesion_id IN ({filtro})")
+    con.execute(f"DELETE FROM estado_monitor WHERE sesion_id IN ({filtro})")
+    con.execute("DELETE FROM sesiones WHERE es_demo = 0 AND fin IS NOT NULL")
+    return int(n)
+
+
+def compactar(con: sqlite3.Connection) -> None:
+    """Después de borrar: reescribe el archivo y vacía el WAL, para que lo borrado no quede en disco."""
+    con.commit()
+    con.execute("VACUUM")
+    con.execute("PRAGMA wal_checkpoint(TRUNCATE)")

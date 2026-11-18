@@ -26,7 +26,9 @@ import streamlit as st
 
 import agente
 import datos
+import herramientas
 import proveedor
+import trazas
 import vivo
 
 # El título empieza por "BioFocus ·": reglas.json cuenta esta pestaña como neutra.
@@ -38,6 +40,8 @@ LOG_MONITOR = RAIZ / "data" / "monitor.log"
 GRABACIONES = RAIZ / "grabaciones"
 ARRANQUE_MAX_S = 40  # MediaPipe y la cámara tardan unos segundos en abrir
 PARADA_MAX_S = 12
+LOG_MAX_BYTES = 512 * 1024  # tope de data/monitor.log
+CONFIRMACION_BORRADO = "BORRAR"
 
 EJEMPLOS = [
     "¿Cómo va mi sesión?",
@@ -100,9 +104,21 @@ def _ultimas_lineas(n: int = 8) -> str:
         return ""
 
 
+def recortar_log(ruta: Path = LOG_MONITOR, maximo: int = LOG_MAX_BYTES) -> None:
+    """data/monitor.log no crece sin tope: si pasa de `maximo`, se queda con su segunda mitad."""
+    try:
+        if ruta.stat().st_size <= maximo:
+            return
+        cola = ruta.read_bytes()[-maximo // 2:]
+        ruta.write_bytes(b"[... recortado por BioFocus ...]\n" + cola[cola.find(b"\n") + 1:])
+    except OSError:
+        pass
+
+
 def iniciar_monitor(meta: str, duracion: int, demo: bool, video: Path | None) -> str | None:
     """Lanza el monitor como proceso aparte y espera a que registre la sesión. Devuelve un error o None."""
     LOG_MONITOR.parent.mkdir(parents=True, exist_ok=True)
+    recortar_log()
     # --meta=valor, en un solo argumento: una meta que empieza por guion («-repaso») no se toma por otra opción.
     cmd = [sys.executable, str(MONITOR), f"--meta={meta}", "--duracion", str(duracion)]
     if demo:
@@ -322,6 +338,51 @@ def panel_origen(es_demo: bool) -> None:
         st.dataframe(pd.DataFrame(reales), hide_index=True, width="stretch")
 
 
+BORRABLES = {
+    "reales": "Mis sesiones reales (con sus metas y eventos)",
+    "demo": "La semana de datos demo",
+    "trazas": "Las trazas del coach (tus preguntas y sus respuestas)",
+    "reglas": "Las reglas que aprobaste en el coach",
+    "log": "El registro del monitor (data/monitor.log)",
+}
+
+
+def borrar(que: str) -> str:
+    """Borra lo elegido. Irreversible: solo se llama tras escribir la confirmación (ver panel_borrar)."""
+    if que in ("reales", "demo"):
+        with _bd() as con:
+            n = datos.borrar_reales(con) if que == "reales" else datos.borrar_demo(con)
+            datos.compactar(con)
+        return f"Borré {n} sesiones {'reales' if que == 'reales' else 'demo'}."
+    if que == "trazas":
+        archivos = sorted(trazas.CARPETA.glob("*.jsonl")) if trazas.CARPETA.is_dir() else []
+        for ruta in archivos:
+            ruta.unlink(missing_ok=True)
+        st.session_state.chat = []  # el chat en pantalla muestra las mismas preguntas
+        return f"Borré {len(archivos)} archivos de trazas."
+    ruta = herramientas.RUTA_REGLAS if que == "reglas" else LOG_MONITOR
+    if not ruta.exists():
+        return f"No había {ruta.name}."
+    try:
+        ruta.unlink()
+    except OSError:
+        return f"No pude borrar {ruta.name}: otro proceso lo tiene abierto. Termina la sesión y vuelve a intentarlo."
+    return f"Borré {ruta.name}."
+
+
+def panel_borrar() -> None:
+    """Borrar exige escribir BORRAR: es la acción irreversible de BioFocus y la decide la persona."""
+    with st.expander("Borrar mis datos"):
+        st.caption(f"No se puede deshacer. Escribe {CONFIRMACION_BORRADO} para confirmar. "
+                   "Una sesión en curso no se borra.")
+        que = st.selectbox("Qué borrar", list(BORRABLES), format_func=BORRABLES.get, key="que_borrar")
+        confirmacion = st.text_input("Confirmación", key="confirmar_borrado", placeholder=CONFIRMACION_BORRADO)
+        if st.button("Borrar", disabled=confirmacion.strip() != CONFIRMACION_BORRADO, width="stretch"):
+            st.session_state.aviso_sesion = "Datos: " + borrar(que)
+            st.session_state.pop("confirmar_borrado", None)
+            st.rerun()
+
+
 with st.sidebar:
     st.subheader("Proveedor activo")
     try:
@@ -358,6 +419,7 @@ with st.sidebar:
     if st.button("Limpiar chat", width="stretch"):
         st.session_state.chat = []
         st.rerun()
+    panel_borrar()
 
 
 # ---------------------------------------------------------------- sesión en vivo
@@ -365,7 +427,8 @@ with st.sidebar:
 st.title("BioFocus")
 if "aviso_sesion" in st.session_state:
     aviso = st.session_state.pop("aviso_sesion")
-    (st.success if aviso.startswith("Sesión") else st.error)(aviso)
+    bien = aviso.startswith("Sesión") or (aviso.startswith("Datos:") and "No pude" not in aviso)
+    (st.success if bien else st.error)(aviso)
 hay_sesion = controles_de_sesion()
 st.fragment(panel_en_vivo, run_every=2 if hay_sesion else None)()
 

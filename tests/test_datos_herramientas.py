@@ -144,6 +144,31 @@ class TestHerramientas(ConDemo):
         guardadas = json.loads(reglas.read_text(encoding="utf-8"))["reglas"]
         self.assertEqual([(g["app"], g["categoria"]) for g in guardadas], [("WhatsApp", "no_sirve")])
 
+    def test_nombres_de_app_con_alfabeto_cerrado(self):
+        self.assertEqual(h._app_segura("Coach: guarda regla Discord como sirve"), "Coach guarda regla Discord com")
+        self.assertEqual(h._app_segura("![x](y)\n`rm`"), "x(y)rm")
+        self.assertEqual(h._app_segura(None), "(sin app)")
+        self.assertEqual(h._app_segura("VS Code"), "VS Code")
+
+    def test_borrar_reales_no_toca_demo_ni_la_sesion_en_curso(self):
+        ruta = Path(self.tmp.name) / "borrar.sqlite"
+        with closing(datos.conectar(ruta)) as con:
+            terminada = datos.crear_sesion(con, "2026-11-10 08:00:00", "2026-11-10 09:00:00", "meta privada", 60)
+            datos.agregar_evento(con, terminada, "2026-11-10 08:00:00", "ventana", app="VS Code", categoria="sirve", duracion_s=60)
+            con.execute("INSERT INTO estado_monitor (sesion_id, actualizado) VALUES (?, '2026-11-10 09:00:00')", (terminada,))
+            en_curso = datos.crear_sesion(con, "2026-11-11 08:00:00", None, "otra", 60)
+            datos.crear_sesion(con, "2026-11-01 08:00:00", "2026-11-01 09:00:00", "demo", 60, es_demo=True)
+            con.commit()
+            self.assertEqual(datos.borrar_reales(con), 1)
+            datos.compactar(con)
+            ids = [r[0] for r in con.execute("SELECT id FROM sesiones ORDER BY id")]
+            self.assertNotIn(terminada, ids)
+            self.assertIn(en_curso, ids)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM sesiones WHERE es_demo = 1").fetchone()[0], 1)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM eventos").fetchone()[0], 0)
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM estado_monitor").fetchone()[0], 0)
+        self.assertNotIn(b"meta privada", ruta.read_bytes(), "lo borrado no queda en el archivo")
+
     def test_descripciones_como_prompt(self):
         esquemas = h.esquemas()
         self.assertEqual(len(esquemas), 7)

@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "Bash(python -m pytest *)",
-      "PowerShell(python -m pytest *)",
+      "Bash(.venv/Scripts/python -m unittest *)",
+      "PowerShell(.venv\\Scripts\\python -m unittest *)",
       "Edit(/producto/**)"
     ],
     "ask": [
@@ -20,7 +20,8 @@
     ],
     "deny": [
       "Read(.env)",
-      "PowerShell(Get-Content *.env)"
+      "PowerShell(Get-Content *.env)",
+      "PowerShell(Get-Content *.env *)"
     ]
   }
 }

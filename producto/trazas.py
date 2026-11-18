@@ -1,20 +1,39 @@
 """Trazas del coach: cada pregunta registra sus spans en orden, con su duración en ms.
 
 Se guardan en traces/AAAA-MM-DD.jsonl (git las ignora) y la app las muestra.
-Nunca llevan la llave, títulos de ventana, imágenes ni audio.
+Nunca llevan la llave, títulos de ventana, imágenes ni audio. Sí llevan la pregunta y la respuesta.
+Se guardan RETENCION_DIAS días: al guardar una traza se borran los archivos más viejos.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
 CARPETA = Path(__file__).resolve().parent.parent / "traces"
+# Por qué 30 días: las trazas llevan las preguntas de la persona; sirven para explicar un fallo reciente
+# (la medición, la sustentación), no como historial. Lo que dura más está en la base, como cifras.
+RETENCION_DIAS = 30
+_ARCHIVO = re.compile(r"^(\d{4}-\d{2}-\d{2})\.jsonl$")
+
+
+def podar(carpeta: str | Path | None = None, hoy: date | None = None) -> list[Path]:
+    """Borra los archivos de trazas de hace más de RETENCION_DIAS días. Devuelve los que borró."""
+    carpeta = Path(carpeta) if carpeta else CARPETA
+    limite = (hoy or date.today()) - timedelta(days=RETENCION_DIAS)
+    borrados = []
+    for ruta in carpeta.glob("*.jsonl") if carpeta.is_dir() else []:
+        m = _ARCHIVO.match(ruta.name)
+        if m and date.fromisoformat(m.group(1)) < limite:
+            ruta.unlink(missing_ok=True)
+            borrados.append(ruta)
+    return borrados
 
 
 class Traza:
@@ -62,6 +81,7 @@ class Traza:
         ruta = self.carpeta / f"{self.inicio:%Y-%m-%d}.jsonl"
         with ruta.open("a", encoding="utf-8") as f:
             f.write(json.dumps(self.a_dict(), ensure_ascii=False, default=str) + "\n")
+        podar(self.carpeta)
         return ruta
 
 

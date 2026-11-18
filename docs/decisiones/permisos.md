@@ -56,3 +56,11 @@ El registro de la sesión marca los tres como rechazados por una regla de `.clau
 - **Límite de los scripts:** ninguna regla cubre un programa que abra el archivo por su cuenta, como un script de Python. Claude Code revisa el texto del comando, no lo que hace el programa. La documentación aclara que estas reglas no son una barrera de seguridad y recomienda el sandbox para bloquear el acceso a nivel del sistema operativo.
 
 Fuente: [Configure permissions](https://code.claude.com/docs/en/permissions), documentación de Claude Code.
+
+## Cambios del 2026-11-17 (Momento 3, hardening)
+| Antes | Después | Por qué |
+|---|---|---|
+| `allow`: `Bash(python -m pytest *)` y `PowerShell(python -m pytest *)` | `allow`: `Bash(.venv/Scripts/python -m unittest *)` y `PowerShell(.venv\Scripts\python -m unittest *)` | El proyecto prueba con `unittest`, no con `pytest`. La regla vieja no servía, y la nueva corre solo el `.venv` del proyecto |
+| `deny`: `Read(.env)` y `PowerShell(Get-Content *.env)` | Se suma `PowerShell(Get-Content *.env *)` | Cierra el hueco de `-Raw` documentado arriba, también para archivos `.env` fuera del proyecto |
+
+Las llaves de Groq y Gemini quedaron expuestas en octubre y se cambiaron el 2026-11-13. La revisión de ese cambio está en `docs/seguridad.md`, sección 4, fila «Secretos».

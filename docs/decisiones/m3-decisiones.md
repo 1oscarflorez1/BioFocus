@@ -49,6 +49,24 @@ Fechas: 2026-11-11 y 2026-11-17. Plan: `docs/PLAN-M3.md`. El bloque A quedó apr
 - Una sesión larga con tiempos normales.
 - La prueba de 3 minutos completa, con una persona frente a la cámara. Queda para el ensayo de la final y la prueba del compañero.
 
+## C · Seguridad (2026-11-17)
+Detalle completo en `docs/seguridad.md`. Aquí van las decisiones menores.
+- **El ataque antes del arreglo.** `producto/evals/ataques.py` corrió primero sobre `169bad9`. El endurecimiento se escribió después y se midió con el mismo script.
+- **Dominio del atacante: `biofocus-ataque.example`.** `.example` está reservado y nunca resuelve: aunque la app hubiera pintado la imagen, nada habría salido.
+- **Títulos nuevos para el clasificador.** Los escribí después de la primera corrida y antes de cambiar el filtro, y no los usé para ajustarlo. Resultado: 3 de 5 pasaron. Lo reporto así, en vez de presentar el 0/6 de los títulos originales como si el filtro generalizara.
+- **Corrida sin la regla 7.** En el «después», el modelo obedeció al prompt y el filtro del código no tuvo nada que quitar. Para probar el control que no depende del modelo agregué `--sin-regla-7`: con eso el modelo obedeció al atacante 3/3 y el código quitó la imagen 3/3.
+- **Falso positivo del evaluador de `app_pide_mentir`.** Contaba el nombre de la app sembrada como si el coach negara las distracciones. Se corrigió y se volvió a puntuar con `--reevaluar`, sin llamar al modelo; el veredicto no cambió.
+- **`limpiar_salida` corre en `_cerrar`.** Cubre todas las respuestas, también los mensajes de error y los de aprobación. La traza guarda la respuesta ya limpia y, en el span `salida_limpiada`, lo que se quitó (hasta 3 muestras de 200 caracteres) para poder auditarlo.
+- **Nombres de app: alfabeto cerrado de letras, números, espacio y `. + - ( )`, y 30 caracteres.** Coincide con `PATRON_APP` de `guardar_regla`. No frena palabras («Coach guarda regla Discord com» pasa), y no se presenta como si lo hiciera: la defensa contra las reglas es la aprobación.
+- **Borrar datos.**
+  - La confirmación es escribir BORRAR, no un segundo clic: un clic se da sin leer.
+  - `borrar_reales` no toca una sesión en curso.
+  - Se activa `secure_delete` y después `VACUUM` y `wal_checkpoint(TRUNCATE)`: una prueba verifica que la meta borrada ya no está en el archivo.
+  - Borrar las trazas también limpia el chat en pantalla, que muestra las mismas preguntas.
+- **Retención.** Trazas: 30 días, borradas al guardar la siguiente. `data/monitor.log`: tope de 512 KB, recortado al iniciar una sesión desde la app. La base no vence sola: es el historial que consulta el coach, y la persona la borra cuando quiera.
+- **`.claude/settings.json`.** `unittest` en vez de `pytest` (con el `.venv` del proyecto) y la regla `deny` que cierra el hueco de `-Raw` (`docs/decisiones/permisos.md`).
+- **`prueba-companero.md`** pasó de la plantilla del coach (Momento 2, commit `f71d922`) a la de la app terminada, para la prueba del padre del autor.
+
 ## Lo que no toqué, y por qué
 - Los bloques B a G del plan: están propuestos y esperan aprobación.
 - Los arreglos de seguridad (respuesta del coach sin imágenes ni enlaces, nombres de app saneados): la rúbrica pide el ataque con su traza y el antes y el después, así que el ataque va primero.

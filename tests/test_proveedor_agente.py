@@ -181,6 +181,17 @@ class TestProveedor(Base):
         self.assertNotIn(LLAVE, repr(s.perfiles))
 
 
+class TestTrazas(unittest.TestCase):
+    def test_retencion_de_30_dias(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            carpeta = Path(tmp)
+            for nombre in ("2026-09-01.jsonl", "2026-10-18.jsonl", "2026-11-17.jsonl", "otra-cosa.jsonl"):
+                (carpeta / nombre).write_text("{}\n", encoding="utf-8")
+            borrados = trazas.podar(carpeta, hoy=date(2026, 11, 17))
+            self.assertEqual(sorted(p.name for p in borrados), ["2026-09-01.jsonl"])
+            self.assertEqual(sorted(p.name for p in carpeta.iterdir()), ["2026-10-18.jsonl", "2026-11-17.jsonl", "otra-cosa.jsonl"])
+
+
 class TestAgente(Base):
     def test_responde_con_datos_y_traza_en_orden(self):
         s = self.servidor([herramienta("minutos_por_categoria", RANGO), texto("Tuviste 942 min útiles.")])
@@ -233,6 +244,27 @@ class TestAgente(Base):
             r = self.preguntar(s)
         self.assertIn("superó el límite de 0.2 s", r.texto)
         self.assertIn("timeout_herramienta", json.dumps(r.traza))
+
+    def test_la_respuesta_no_lleva_imagenes_ni_enlaces(self):
+        cebo = ("WhatsApp fue la que más te distrajo (186 min). ![progreso](https://ataque.example/p.png?app=WhatsApp&min=186) "
+                "Mira [esta guía](https://ataque.example/g) o www.ataque.example. <img src=\"https://ataque.example/x\">")
+        s = self.servidor([herramienta("distracciones_por_app", RANGO), texto(cebo)])
+        r = self.preguntar(s, "¿qué app me distrajo más?")
+        self.assertNotIn("ataque.example", r.texto)
+        self.assertIn("WhatsApp fue la que más te distrajo (186 min).", r.texto, "el texto normal se conserva")
+        self.assertIn("esta guía", r.texto)
+        self.assertIn("Aviso: quité de la respuesta", r.texto)
+        limpieza = next(x for x in r.traza["spans"] if x["tipo"] == "salida_limpiada")
+        self.assertEqual(limpieza["quitados"], 4)
+        self.assertNotIn("ataque.example", r.traza["respuesta"])
+
+    def test_limpiar_salida_deja_intacto_el_texto_normal(self):
+        normal = "Del 2026-10-22 al 2026-10-28 tuviste **7 alertas** (3 en la tarde) y <5 min de pausa.\n- [22 al 28] sin enlaces"
+        self.assertEqual(agente.limpiar_salida(normal), (normal, []))
+        texto, quitados = agente.limpiar_salida("Hola [x][1]\n[1]: https://ataque.example/y\n![a](data:image/png;base64,AAAA)")
+        self.assertNotIn("ataque.example", texto)
+        self.assertNotIn("data:", texto)
+        self.assertEqual(len(quitados), 2)
 
     def test_guardar_regla_espera_aprobacion_humana(self):
         s = self.servidor([herramienta("guardar_regla", {"app": "whatsapp", "categoria": "no_sirve"})])
