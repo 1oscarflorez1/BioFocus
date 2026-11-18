@@ -1,0 +1,497 @@
+{
+ "fecha": "2026-11-18T03:35:16",
+ "casos_archivo": "casos_m3.json",
+ "origen": "demo",
+ "perfiles": [
+  "groq · openai/gpt-oss-120b",
+  "gemini · gemini-3.5-flash-lite"
+ ],
+ "datos": {
+  "generador": "producto/generar_datos_demo.py",
+  "semilla": 42,
+  "hasta": "2026-10-28",
+  "hoy": "2026-10-29"
+ },
+ "corridas": 3,
+ "pausa_s": 28.0,
+ "ejecuciones": [
+  {
+   "corrida": 1,
+   "id": "sesion_en_vivo",
+   "pregunta": "¿Cómo va mi sesión?",
+   "respuesta": "Actualmente no hay ninguna sesión real registrada; solo dispones de la semana de datos demo. Por eso no puedo indicarte cómo va tu sesión en este momento. Cuando comiences una sesión real, podrás ver el progreso, alertas y tiempo estudiado. Si necesitas información de la semana demo, avísame.",
+   "pasa": true,
+   "motivo": "llamó sesion_actual: sí; pidió: sesion_actual",
+   "latencia_ms": 1624,
+   "tokens_entrada": 3818,
+   "tokens_salida": 152,
+   "herramientas_llamadas": [
+    "sesion_actual"
+   ],
+   "requeridas": [
+    1,
+    1
+   ],
+   "traza": {
+    "id": "10ac96a8e5d4",
+    "fecha": "2026-11-18T03:35:16",
+    "pregunta": "¿Cómo va mi sesión?",
+    "respuesta": "Actualmente no hay ninguna sesión real registrada; solo dispones de la semana de datos demo. Por eso no puedo indicarte cómo va tu sesión en este momento. Cuando comiences una sesión real, podrás ver el progreso, alertas y tiempo estudiado. Si necesitas información de la semana demo, avísame.",
+    "ok": true,
+    "tokens": 3970,
+    "herramientas_usadas": [
+     "sesion_actual"
+    ],
+    "pendiente": null,
+    "fallo": null,
+    "duracion_total_ms": 1623.4,
+    "spans": [
+     {
+      "orden": 1,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1879,
+      "tokens_salida": 35,
+      "llamadas_a_herramientas": 1,
+      "duracion_ms": 802.1
+     },
+     {
+      "orden": 2,
+      "tipo": "validacion",
+      "herramienta": "sesion_actual",
+      "argumentos": "{}",
+      "ok": true,
+      "duracion_ms": 0.0
+     },
+     {
+      "orden": 3,
+      "tipo": "herramienta",
+      "nombre": "sesion_actual",
+      "argumentos": {},
+      "estado": "ok",
+      "resultado": "no hay sesiones reales todavía",
+      "duracion_ms": 13.9
+     },
+     {
+      "orden": 4,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1939,
+      "tokens_salida": 117,
+      "llamadas_a_herramientas": 0,
+      "duracion_ms": 805.8
+     }
+    ]
+   }
+  },
+  {
+   "corrida": 1,
+   "id": "distraccion_en_vivo",
+   "pregunta": "¿Qué me distrajo en esta sesión?",
+   "respuesta": "No hay ninguna sesión real registrada en este momento; solo disponemos de los datos de la semana de demostración. Por eso no puedo indicarte qué te distrajo en una sesión actual. Si deseas información sobre la semana demo o sobre otras métricas, avísame.",
+   "pasa": true,
+   "motivo": "llamó sesion_actual: sí; pidió: sesion_actual",
+   "latencia_ms": 1330,
+   "tokens_entrada": 3824,
+   "tokens_salida": 202,
+   "herramientas_llamadas": [
+    "sesion_actual"
+   ],
+   "requeridas": [
+    1,
+    1
+   ],
+   "traza": {
+    "id": "2d17b7744a09",
+    "fecha": "2026-11-18T03:35:46",
+    "pregunta": "¿Qué me distrajo en esta sesión?",
+    "respuesta": "No hay ninguna sesión real registrada en este momento; solo disponemos de los datos de la semana de demostración. Por eso no puedo indicarte qué te distrajo en una sesión actual. Si deseas información sobre la semana demo o sobre otras métricas, avísame.",
+    "ok": true,
+    "tokens": 4026,
+    "herramientas_usadas": [
+     "sesion_actual"
+    ],
+    "pendiente": null,
+    "fallo": null,
+    "duracion_total_ms": 1329.6,
+    "spans": [
+     {
+      "orden": 1,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1882,
+      "tokens_salida": 52,
+      "llamadas_a_herramientas": 1,
+      "duracion_ms": 572.8
+     },
+     {
+      "orden": 2,
+      "tipo": "validacion",
+      "herramienta": "sesion_actual",
+      "argumentos": "{}",
+      "ok": true,
+      "duracion_ms": 0.0
+     },
+     {
+      "orden": 3,
+      "tipo": "herramienta",
+      "nombre": "sesion_actual",
+      "argumentos": {},
+      "estado": "ok",
+      "resultado": "no hay sesiones reales todavía",
+      "duracion_ms": 4.5
+     },
+     {
+      "orden": 4,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1942,
+      "tokens_salida": 150,
+      "llamadas_a_herramientas": 0,
+      "duracion_ms": 750.3
+     }
+    ]
+   }
+  },
+  {
+   "corrida": 2,
+   "id": "sesion_en_vivo",
+   "pregunta": "¿Cómo va mi sesión?",
+   "respuesta": "No hay ninguna sesión real registrada en este momento; solo dispones de la semana de datos demo. Por eso la herramienta de sesión actual indica que aún no ha comenzado ninguna sesión real. Si deseas información sobre cómo fueron tus sesiones en la semana demo, puedo resumir esos datos. Avísame si te gustaría ver ese resumen.",
+   "pasa": true,
+   "motivo": "llamó sesion_actual: sí; pidió: sesion_actual",
+   "latencia_ms": 1253,
+   "tokens_entrada": 3818,
+   "tokens_salida": 168,
+   "herramientas_llamadas": [
+    "sesion_actual"
+   ],
+   "requeridas": [
+    1,
+    1
+   ],
+   "traza": {
+    "id": "54f1095e3af3",
+    "fecha": "2026-11-18T03:36:15",
+    "pregunta": "¿Cómo va mi sesión?",
+    "respuesta": "No hay ninguna sesión real registrada en este momento; solo dispones de la semana de datos demo. Por eso la herramienta de sesión actual indica que aún no ha comenzado ninguna sesión real. Si deseas información sobre cómo fueron tus sesiones en la semana demo, puedo resumir esos datos. Avísame si te gustaría ver ese resumen.",
+    "ok": true,
+    "tokens": 3986,
+    "herramientas_usadas": [
+     "sesion_actual"
+    ],
+    "pendiente": null,
+    "fallo": null,
+    "duracion_total_ms": 1253.1,
+    "spans": [
+     {
+      "orden": 1,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1879,
+      "tokens_salida": 35,
+      "llamadas_a_herramientas": 1,
+      "duracion_ms": 536.7
+     },
+     {
+      "orden": 2,
+      "tipo": "validacion",
+      "herramienta": "sesion_actual",
+      "argumentos": "{}",
+      "ok": true,
+      "duracion_ms": 0.0
+     },
+     {
+      "orden": 3,
+      "tipo": "herramienta",
+      "nombre": "sesion_actual",
+      "argumentos": {},
+      "estado": "ok",
+      "resultado": "no hay sesiones reales todavía",
+      "duracion_ms": 4.5
+     },
+     {
+      "orden": 4,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1939,
+      "tokens_salida": 133,
+      "llamadas_a_herramientas": 0,
+      "duracion_ms": 709.9
+     }
+    ]
+   }
+  },
+  {
+   "corrida": 2,
+   "id": "distraccion_en_vivo",
+   "pregunta": "¿Qué me distrajo en esta sesión?",
+   "respuesta": "No hay ninguna sesión real registrada en este momento; solo disponemos de la semana de datos demo. Por eso no puedo indicarte qué te distrajo en una sesión actual. Si lo deseas, puedo ofrecerte un resumen de la semana demo o de otro período disponible.",
+   "pasa": true,
+   "motivo": "llamó sesion_actual: sí; pidió: sesion_actual",
+   "latencia_ms": 1190,
+   "tokens_entrada": 3824,
+   "tokens_salida": 182,
+   "herramientas_llamadas": [
+    "sesion_actual"
+   ],
+   "requeridas": [
+    1,
+    1
+   ],
+   "traza": {
+    "id": "b532a9cbc18f",
+    "fecha": "2026-11-18T03:36:44",
+    "pregunta": "¿Qué me distrajo en esta sesión?",
+    "respuesta": "No hay ninguna sesión real registrada en este momento; solo disponemos de la semana de datos demo. Por eso no puedo indicarte qué te distrajo en una sesión actual. Si lo deseas, puedo ofrecerte un resumen de la semana demo o de otro período disponible.",
+    "ok": true,
+    "tokens": 4006,
+    "herramientas_usadas": [
+     "sesion_actual"
+    ],
+    "pendiente": null,
+    "fallo": null,
+    "duracion_total_ms": 1190.0,
+    "spans": [
+     {
+      "orden": 1,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1882,
+      "tokens_salida": 52,
+      "llamadas_a_herramientas": 1,
+      "duracion_ms": 570.2
+     },
+     {
+      "orden": 2,
+      "tipo": "validacion",
+      "herramienta": "sesion_actual",
+      "argumentos": "{}",
+      "ok": true,
+      "duracion_ms": 0.0
+     },
+     {
+      "orden": 3,
+      "tipo": "herramienta",
+      "nombre": "sesion_actual",
+      "argumentos": {},
+      "estado": "ok",
+      "resultado": "no hay sesiones reales todavía",
+      "duracion_ms": 4.1
+     },
+     {
+      "orden": 4,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1942,
+      "tokens_salida": 130,
+      "llamadas_a_herramientas": 0,
+      "duracion_ms": 613.7
+     }
+    ]
+   }
+  },
+  {
+   "corrida": 3,
+   "id": "sesion_en_vivo",
+   "pregunta": "¿Cómo va mi sesión?",
+   "respuesta": "No hay ninguna sesión real registrada en este momento; solo dispones de la semana de datos demo. Por eso no puedo ofrecerte información sobre tu progreso actual. Puedes iniciar una sesión de estudio para que el monitor empiece a registrar tus datos. Cuando haya una sesión en curso, podré indicarte minutos transcurridos, alertas y distracciones. Si necesitas otra información, avísame.",
+   "pasa": true,
+   "motivo": "llamó sesion_actual: sí; pidió: sesion_actual",
+   "latencia_ms": 1800,
+   "tokens_entrada": 3818,
+   "tokens_salida": 169,
+   "herramientas_llamadas": [
+    "sesion_actual"
+   ],
+   "requeridas": [
+    1,
+    1
+   ],
+   "traza": {
+    "id": "9a2201aff5e5",
+    "fecha": "2026-11-18T03:37:14",
+    "pregunta": "¿Cómo va mi sesión?",
+    "respuesta": "No hay ninguna sesión real registrada en este momento; solo dispones de la semana de datos demo. Por eso no puedo ofrecerte información sobre tu progreso actual. Puedes iniciar una sesión de estudio para que el monitor empiece a registrar tus datos. Cuando haya una sesión en curso, podré indicarte minutos transcurridos, alertas y distracciones. Si necesitas otra información, avísame.",
+    "ok": true,
+    "tokens": 3987,
+    "herramientas_usadas": [
+     "sesion_actual"
+    ],
+    "pendiente": null,
+    "fallo": null,
+    "duracion_total_ms": 1800.0,
+    "spans": [
+     {
+      "orden": 1,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1879,
+      "tokens_salida": 35,
+      "llamadas_a_herramientas": 1,
+      "duracion_ms": 978.7
+     },
+     {
+      "orden": 2,
+      "tipo": "validacion",
+      "herramienta": "sesion_actual",
+      "argumentos": "{}",
+      "ok": true,
+      "duracion_ms": 0.0
+     },
+     {
+      "orden": 3,
+      "tipo": "herramienta",
+      "nombre": "sesion_actual",
+      "argumentos": {},
+      "estado": "ok",
+      "resultado": "no hay sesiones reales todavía",
+      "duracion_ms": 4.7
+     },
+     {
+      "orden": 4,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1939,
+      "tokens_salida": 134,
+      "llamadas_a_herramientas": 0,
+      "duracion_ms": 814.7
+     }
+    ]
+   }
+  },
+  {
+   "corrida": 3,
+   "id": "distraccion_en_vivo",
+   "pregunta": "¿Qué me distrajo en esta sesión?",
+   "respuesta": "No hay ninguna sesión real registrada en este momento; solo disponemos de la semana de datos de demostración. Por eso no puedo indicarte qué te distrajo en una sesión actual. Si deseas información sobre la semana demo o sobre sesiones pasadas, avísame y la consulto.",
+   "pasa": true,
+   "motivo": "llamó sesion_actual: sí; pidió: sesion_actual",
+   "latencia_ms": 1290,
+   "tokens_entrada": 3824,
+   "tokens_salida": 224,
+   "herramientas_llamadas": [
+    "sesion_actual"
+   ],
+   "requeridas": [
+    1,
+    1
+   ],
+   "traza": {
+    "id": "cef8c5a0f7de",
+    "fecha": "2026-11-18T03:37:43",
+    "pregunta": "¿Qué me distrajo en esta sesión?",
+    "respuesta": "No hay ninguna sesión real registrada en este momento; solo disponemos de la semana de datos de demostración. Por eso no puedo indicarte qué te distrajo en una sesión actual. Si deseas información sobre la semana demo o sobre sesiones pasadas, avísame y la consulto.",
+    "ok": true,
+    "tokens": 4048,
+    "herramientas_usadas": [
+     "sesion_actual"
+    ],
+    "pendiente": null,
+    "fallo": null,
+    "duracion_total_ms": 1289.5,
+    "spans": [
+     {
+      "orden": 1,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1882,
+      "tokens_salida": 52,
+      "llamadas_a_herramientas": 1,
+      "duracion_ms": 571.3
+     },
+     {
+      "orden": 2,
+      "tipo": "validacion",
+      "herramienta": "sesion_actual",
+      "argumentos": "{}",
+      "ok": true,
+      "duracion_ms": 0.0
+     },
+     {
+      "orden": 3,
+      "tipo": "herramienta",
+      "nombre": "sesion_actual",
+      "argumentos": {},
+      "estado": "ok",
+      "resultado": "no hay sesiones reales todavía",
+      "duracion_ms": 4.6
+     },
+     {
+      "orden": 4,
+      "tipo": "llm",
+      "proveedor": "groq",
+      "modelo": "openai/gpt-oss-120b",
+      "intento": 1,
+      "estado": "ok",
+      "tokens_entrada": 1942,
+      "tokens_salida": 172,
+      "llamadas_a_herramientas": 0,
+      "duracion_ms": 711.8
+     }
+    ]
+   }
+  }
+ ],
+ "metricas": {
+  "ejecuciones": 6,
+  "exitos": 6,
+  "tasa_exito": 1.0,
+  "por_corrida": {
+   "1": "2/2",
+   "2": "2/2",
+   "3": "2/2"
+  },
+  "por_caso": {
+   "sesion_en_vivo": "3/3",
+   "distraccion_en_vivo": "3/3"
+  },
+  "tokens_entrada_por_tarea": 3821,
+  "tokens_salida_por_tarea": 183,
+  "usd_por_tarea": 0.000683,
+  "llamadas_sin_precio_verificado": 0,
+  "fuente_precios": "https://console.groq.com/docs/model/openai/gpt-oss-120b, consultada el 2026-10-29: 0,15 USD por millón de tokens de entrada y 0,60 de salida (sin descuento por entrada en caché: es una cota superior). gemini-3.5-flash no aparece en https://ai.google.dev/gemini-api/docs/pricing ese día: solo tokens.",
+  "latencia_mediana_ms": 1310,
+  "latencia_p90_ms": 1800,
+  "recuperacion": 1.0,
+  "herramientas_requeridas": "6/6",
+  "llamadas_llm_por_modelo": {
+   "groq · openai/gpt-oss-120b": 12
+  },
+  "tareas_con_reintento_429": 0,
+  "tareas_con_cambio_de_proveedor": 0
+ }
+}
