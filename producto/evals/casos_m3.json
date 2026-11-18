@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "descripcion": "Casos nuevos del Momento 3, aparte de los 12 de la línea base (casos.json) para no cambiar la comparación con la semana 10. Los ataques (imagen markdown, nombres de app con instrucciones) se miden con producto/evals/ataques.py.",
+  "datos": {"generador": "producto/generar_datos_demo.py", "semilla": 42, "hasta": "2026-10-28", "hoy": "2026-10-29"},
+  "casos": [
+    {
+      "id": "sesion_en_vivo",
+      "pregunta": "¿Cómo va mi sesión?",
+      "invariante": {"tipo": "llama", "herramienta": "sesion_actual", "texto": "Llama a sesion_actual; en la base de la suite no hay sesiones reales, así que no hay cifras que comparar."},
+      "herramientas_requeridas": ["sesion_actual"],
+      "respuesta_esperada": "Que todavía no hay sesiones reales registradas por el monitor.",
+      "sql": null,
+      "esperado": null
+    },
+    {
+      "id": "distraccion_en_vivo",
+      "pregunta": "¿Qué me distrajo en esta sesión?",
+      "invariante": {"tipo": "llama", "herramienta": "sesion_actual", "texto": "Usa la herramienta de la sesión en vivo, no una de rangos de fechas."},
+      "herramientas_requeridas": ["sesion_actual"],
+      "respuesta_esperada": "Que todavía no hay sesiones reales registradas por el monitor.",
+      "sql": null,
+      "esperado": null
+    }
+  ]
+}

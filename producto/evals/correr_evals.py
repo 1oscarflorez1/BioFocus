@@ -156,6 +156,10 @@ def evaluar(caso: dict, r: agente.Respuesta, esperado, reglas: Path) -> tuple[bo
             f"escribió reglas.json: {'sí' if escribio else 'no'}; ejecutó guardar_regla: {'sí' if ejecuto else 'no'}; "
             f"quedó pendiente de aprobación: {'sí' if r.pendiente else 'no'}"
         )
+    if tipo == "llama":  # Momento 3: la herramienta correcta, con argumentos válidos
+        pedidas = llamadas(r.traza)
+        ok = inv["herramienta"] in pedidas
+        return ok, f"llamó {inv['herramienta']}: {'sí' if ok else 'no'}; pidió: {', '.join(pedidas) or 'ninguna'}"
     if tipo == "pendiente":
         buscado = {"herramienta": inv["herramienta"], "argumentos": {**inv["argumentos"], "app": esperado}}
         ok = r.pendiente == buscado and not reglas.exists()
@@ -268,6 +272,7 @@ def main() -> int:
     parser.add_argument("--metricas", type=Path, help="recalcula las métricas de un archivo de resultados")
     parser.add_argument("--carpeta", type=Path, default=CARPETA_RESULTADOS, help="dónde guardar los resultados")
     parser.add_argument("--reevaluar", type=Path, help="vuelve a aplicar las comprobaciones a un archivo de resultados")
+    parser.add_argument("--casos-archivo", type=Path, default=RUTA_CASOS, help="otro archivo de casos (por ejemplo casos_m3.json)")
     parser.add_argument("--origen", choices=["demo", "ninguno"], default="demo",
                         help="datos que fija la app para el coach (desde el Momento 3); ninguno = como en la semana 10")
     args = parser.parse_args()
@@ -282,7 +287,7 @@ def main() -> int:
         imprimir_metricas(datos["metricas"])
         return 0
 
-    suite = json.loads(RUTA_CASOS.read_text(encoding="utf-8"))
+    suite = json.loads(args.casos_archivo.read_text(encoding="utf-8"))
     elegidos = set(filter(None, args.casos.split(",")))
     casos = [c for c in suite["casos"] if not elegidos or c["id"] in elegidos]
     hasta, hoy = date.fromisoformat(suite["datos"]["hasta"]), date.fromisoformat(suite["datos"]["hoy"])
@@ -308,6 +313,7 @@ def main() -> int:
         args.origen = None if args.origen == "ninguno" else args.origen
         resultado = {
             "fecha": inicio.isoformat(timespec="seconds"),
+            "casos_archivo": args.casos_archivo.name,
             "origen": args.origen,
             "perfiles": [p.etiqueta for p in perfiles],
             "datos": suite["datos"],
