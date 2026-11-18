@@ -3,7 +3,7 @@
 Correr desde la raíz del repo:
     .venv\\Scripts\\python -m streamlit run producto\\app.py
 
-"Iniciar sesión" lanza producto/monitor.py como proceso aparte (cámara y ventana activa) y "Terminar sesión"
+"Empezar sesión de estudio" lanza producto/monitor.py como proceso aparte (cámara y ventana activa) y "Terminar sesión"
 le pide que termine. Si el monitor se inicia desde la terminal, la app igual lo muestra.
 """
 
@@ -41,6 +41,13 @@ GRABACIONES = RAIZ / "grabaciones"
 ARRANQUE_MAX_S = 40  # MediaPipe y la cámara tardan unos segundos en abrir
 PARADA_MAX_S = 12
 LOG_MAX_BYTES = 512 * 1024  # tope de data/monitor.log
+BOTON_EMPEZAR = "Empezar sesión de estudio"  # «Iniciar sesión» se leía como entrar con usuario y contraseña
+AVISO_INICIO = (
+    "Al empezar se enciende la cámara y se abre la ventana «BioFocus monitor». La imagen se procesa en este equipo "
+    "y no se guarda. Los títulos de ventanas que no son obvias van a Groq, con tu meta, para decidir si sirven; "
+    "los de banco, correo y contraseñas nunca salen. Termina cuando quieras con «Terminar sesión» o la tecla q."
+)
+ORIGENES_COACH = {"reales": "Mis sesiones reales", "demo": "Semana de datos demo"}
 CONFIRMACION_BORRADO = "BORRAR"
 
 EJEMPLOS = [
@@ -192,16 +199,18 @@ def controles_de_sesion() -> bool:
             st.rerun()
         return True
     st.session_state.habia_sesion = False
-    st.caption("Si inicias el monitor desde la terminal, recarga la página para verlo aquí.")
     videos = sorted(GRABACIONES.glob("*.mp4")) if GRABACIONES.is_dir() else []
     with st.form("iniciar_sesion"):
-        meta = st.text_input("Meta de la sesión", placeholder="Ej.: repasar integración por partes", max_chars=200)
+        st.markdown("**Empieza una sesión de estudio.** Escribe qué quieres lograr y presiona el botón.")
+        st.info(AVISO_INICIO, icon="📷")
+        meta = st.text_input("¿Qué quieres lograr en esta sesión?", placeholder="Ej.: repasar integración por partes",
+                             max_chars=200)
         c1, c2, c3 = st.columns([1, 1, 2])
         duracion = c1.number_input("Duración (min)", min_value=1, max_value=600, value=3)
         demo = c2.toggle("Modo demo", value=True, help="Postura 5 s, distracción 10 s y 30 s entre alertas del mismo tipo.")
         fuente = c3.selectbox("Imagen", ["Cámara"] + [v.name for v in videos],
                               help="Plan B: un video de grabaciones/ en vez de la cámara.")
-        if st.form_submit_button("Iniciar sesión", type="primary"):
+        if st.form_submit_button(BOTON_EMPEZAR, type="primary"):
             if not meta.strip():
                 st.error("Escribe la meta: el monitor la usa para decidir qué ventanas sirven.")
                 return
@@ -210,6 +219,7 @@ def controles_de_sesion() -> bool:
                 error = iniciar_monitor(meta.strip(), int(duracion), demo, video)
             st.session_state.aviso_sesion = error or "Sesión iniciada. La ventana «BioFocus monitor» muestra la cámara; q la termina y c recalibra."
             st.rerun()
+    st.caption("Si inicias el monitor desde la terminal, recarga la página para verlo aquí.")
     return False
 
 
@@ -273,7 +283,7 @@ def panel_en_vivo() -> None:
     if (fila is not None) != st.session_state.get("habia_sesion", False):
         st.rerun()  # la sesión empezó o terminó fuera de esta página (terminal, tecla q): refresca los controles
     if r is None:
-        st.info("Todavía no hay sesiones reales. Escribe una meta y presiona «Iniciar sesión».")
+        st.info(f"Todavía no hay sesiones reales. Escribe una meta y presiona «{BOTON_EMPEZAR}».")
         return
     en_curso = r["estado"] == "en curso"
     st.markdown(f"#### {'Sesión en vivo' if en_curso else 'Última sesión real'}")
@@ -384,7 +394,8 @@ def panel_borrar() -> None:
 
 
 with st.sidebar:
-    st.subheader("Proveedor activo")
+    tecnicas = st.expander("Opciones técnicas: proveedor e interruptores de prueba")
+    tecnicas.caption("Proveedor activo")
     try:
         configurados = proveedor.perfiles_configurados()
     except proveedor.ErrorConfiguracion as e:
@@ -392,22 +403,22 @@ with st.sidebar:
         st.error(str(e))
     if configurados:
         opciones = opciones_de_proveedor(configurados)
-        etiqueta = st.selectbox(
+        etiqueta = tecnicas.selectbox(
             "Proveedor y modelo",
             [p.etiqueta for p in opciones],
             key="proveedor_activo",
             help="Cambia en vivo: se usa desde la próxima pregunta.",
         )
         perfiles = cadena(opciones, configurados, etiqueta)
-        st.caption(f"Respaldo: {perfiles[1].etiqueta}" if len(perfiles) > 1 else "Sin respaldo configurado")
+        tecnicas.caption(f"Respaldo: {perfiles[1].etiqueta}" if len(perfiles) > 1 else "Sin respaldo configurado")
     else:
         perfiles = []
         st.warning("No hay proveedor en .env: copia .env.example a .env y llena LLM_PROVIDER y LLM_API_KEY.")
 
-    st.subheader("Interruptores de prueba")
-    forzar_429 = st.radio("Forzar 429", list(OPCIONES_429), format_func=OPCIONES_429.get, horizontal=True)
-    forzar_timeout = st.toggle("Forzar timeout")
-    forzar_invalida = st.radio(
+    tecnicas.caption("Interruptores de prueba (fuerzan errores del proveedor)")
+    forzar_429 = tecnicas.radio("Forzar 429", list(OPCIONES_429), format_func=OPCIONES_429.get, horizontal=True)
+    forzar_timeout = tecnicas.toggle("Forzar timeout")
+    forzar_invalida = tecnicas.radio(
         "Forzar salida inválida", list(OPCIONES_INVALIDA), format_func=OPCIONES_INVALIDA.get, horizontal=True
     )
 
@@ -507,6 +518,18 @@ activos = [
 if activos:
     st.warning("Interruptores de prueba encendidos: " + ", ".join(activos) + ".")
 
+with _bd() as con:
+    hay_reales = vivo.ultima_sesion_real(con) is not None
+origen = st.radio(
+    "¿Sobre qué datos pregunto?",
+    list(ORIGENES_COACH),
+    format_func=ORIGENES_COACH.get,
+    index=0 if hay_reales else 1,
+    horizontal=True,
+    key="origen_coach",
+    help="Las sesiones reales y la semana demo nunca se suman. «¿Cómo va mi sesión?» siempre mira la sesión real.",
+)
+
 for i, m in enumerate(st.session_state.chat):
     if m["rol"] == "user":
         with st.chat_message("user"):
@@ -527,6 +550,6 @@ if pregunta:
     st.session_state.chat.append({"rol": "user", "texto": pregunta})
     interruptores = proveedor.Interruptores(forzar_429, forzar_timeout, forzar_invalida)
     with st.spinner("Consultando tus datos…"):
-        respuesta = agente.responder(pregunta, previo, perfiles=perfiles, interruptores=interruptores)
+        respuesta = agente.responder(pregunta, previo, perfiles=perfiles, interruptores=interruptores, origen=origen)
     st.session_state.chat.append({"rol": "assistant", "respuesta": respuesta, "resuelta": False})
     st.rerun()

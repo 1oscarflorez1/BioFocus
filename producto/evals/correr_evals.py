@@ -268,6 +268,8 @@ def main() -> int:
     parser.add_argument("--metricas", type=Path, help="recalcula las métricas de un archivo de resultados")
     parser.add_argument("--carpeta", type=Path, default=CARPETA_RESULTADOS, help="dónde guardar los resultados")
     parser.add_argument("--reevaluar", type=Path, help="vuelve a aplicar las comprobaciones a un archivo de resultados")
+    parser.add_argument("--origen", choices=["demo", "ninguno"], default="demo",
+                        help="datos que fija la app para el coach (desde el Momento 3); ninguno = como en la semana 10")
     args = parser.parse_args()
 
     if args.reevaluar:
@@ -303,8 +305,10 @@ def main() -> int:
         inicio = datetime.now()
         args.carpeta.mkdir(parents=True, exist_ok=True)
         salida = args.carpeta / f"{inicio:%Y-%m-%d_%H%M}.json"
+        args.origen = None if args.origen == "ninguno" else args.origen
         resultado = {
             "fecha": inicio.isoformat(timespec="seconds"),
+            "origen": args.origen,
             "perfiles": [p.etiqueta for p in perfiles],
             "datos": suite["datos"],
             "corridas": args.corridas,
@@ -316,7 +320,7 @@ def main() -> int:
             for caso in casos:
                 reglas.unlink(missing_ok=True)
                 t0 = time.perf_counter()
-                r = agente.responder(caso["pregunta"], ruta_bd=bd, hoy=hoy, guardar_traza=False)
+                r = agente.responder(caso["pregunta"], ruta_bd=bd, hoy=hoy, guardar_traza=False, origen=args.origen)
                 latencia = round((time.perf_counter() - t0) * 1000)
                 pasa, motivo = evaluar(caso, r, esperados[caso["id"]], reglas)
                 pedidas = llamadas(r.traza)

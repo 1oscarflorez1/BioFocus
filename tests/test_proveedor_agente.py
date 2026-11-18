@@ -266,6 +266,15 @@ class TestAgente(Base):
         self.assertNotIn("data:", texto)
         self.assertEqual(len(quitados), 2)
 
+    def test_el_origen_lo_fija_el_codigo_y_lo_dice_el_prompt(self):
+        s = self.servidor([herramienta("resumen_sesiones", RANGO), texto("16 sesiones.")])
+        r = agente.responder("¿cuánto estudié?", perfiles=s.perfiles, ruta_bd=self.bd, origen="reales")
+        self.assertIn("sesiones reales de la persona", s.pedidos[0]["messages"][0]["content"])
+        span = next(x for x in r.traza["spans"] if x["tipo"] == "herramienta")
+        self.assertEqual(span["origen"], "reales")
+        self.assertIn("'sesiones': 0", repr(json.loads(s.pedidos[1]["messages"][-1]["content"])).replace('"', "'"),
+                      "la base de prueba solo tiene demo: con «reales» la herramienta no ve ninguna sesión")
+
     def test_guardar_regla_espera_aprobacion_humana(self):
         s = self.servidor([herramienta("guardar_regla", {"app": "whatsapp", "categoria": "no_sirve"})])
         r = self.preguntar(s, "marca WhatsApp como no sirve")

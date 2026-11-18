@@ -67,6 +67,32 @@ Detalle completo en `docs/seguridad.md`. Aquí van las decisiones menores.
 - **`.claude/settings.json`.** `unittest` en vez de `pytest` (con el `.venv` del proyecto) y la regla `deny` que cierra el hueco de `-Raw` (`docs/decisiones/permisos.md`).
 - **`prueba-companero.md`** pasó de la plantilla del coach (Momento 2, commit `f71d922`) a la de la app terminada, para la prueba del padre del autor.
 
+## B · Uso diario: B1 a B4 y B8 (2026-11-17)
+- **B1 · Origen de los datos del coach.**
+  - Las cuatro herramientas por fechas reciben `origen` («reales» o «demo»). Lo pone el código, desde el selector «¿Sobre qué datos pregunto?» de la app: el modelo no lo ve como parámetro ni puede cambiarlo.
+  - El prompt dice qué datos eligió la persona, y la traza guarda el origen en el span de cada herramienta.
+  - Sin origen (`None`), las herramientas consultan todo, como antes. Así quedan las pruebas viejas y `ataques.py`.
+  - El selector arranca en «Mis sesiones reales» si hay alguna; si no, en «Semana de datos demo».
+  - `sesion_actual` no cambia: siempre es la sesión real.
+- **La evaluación pasa `origen="demo"`** (`correr_evals.py --origen`), porque así consulta la app la semana demo. Agrega una línea al prompt, y la comparación con la semana 10 lo tiene que decir. `--origen ninguno` repite el comportamiento de la semana 10.
+- **B2 · Sesión abierta.** Cuenta hasta la última señal del monitor (`estado_monitor.actualizado`), no hasta «ahora». Así una sesión que se cayó y no se ha cerrado no suma horas falsas. La fila lleva `en_curso` y el resumen, `sesiones_en_curso`.
+- **B3 · Rearme de la postura.** Se rearma tras 10 s seguidos en «bien» (3 s en demo), además de al volver a −10 %. El cooldown de 5 min sigue, así que hay como mucho una alerta de postura cada 5 min. La prueba vieja que exigía «sin volver a −10 % no hay segunda alerta» cambió a propósito.
+- **B4 · Pausas.**
+  - Salir de cuadro 60 s o más (10 s en demo), con la línea base ya calibrada, se guarda como evento `pausa` («fuera de cuadro»).
+  - Si la sesión termina con la persona fuera de cuadro, esa pausa también cuenta, salvo que el cierre sea porque la cámara dejó de entregar imagen: un cuadro negro no es una pausa.
+  - Tras 50 min sin pausa (90 s en demo), cartel azul y sonido con una pausa de motivo «general» del catálogo, rotando.
+  - El recordatorio no se guarda: la tabla `eventos` tiene una lista cerrada de tipos (CHECK) y agregar uno exige migrar la base.
+- **B8 · Primer uso.**
+  - El botón dice «Empezar sesión de estudio».
+  - Antes del botón se ve el aviso de cámara y de qué sale del equipo, y la meta se pregunta como «¿Qué quieres lograr en esta sesión?».
+  - El proveedor y los interruptores de prueba quedan dentro de «Opciones técnicas», plegado.
+  - Revisado en el navegador: la pantalla de inicio se entiende sin explicación.
+  - Detalle visto: en una ventana de 800 × 600 la página abre desplazada hacia el chat. Queda para la prueba con la persona ajena.
+- **Verificación:**
+  - 89 pruebas.
+  - Los tres videos dan lo mismo que en el Momento 2: `derecho` y `distraido` sin alertas; `encorvado`, una alerta de postura a los 16,5 s.
+  - La app cargada sin excepciones.
+
 ## Lo que no toqué, y por qué
 - Los bloques B a G del plan: están propuestos y esperan aprobación.
 - Los arreglos de seguridad (respuesta del coach sin imágenes ni enlaces, nombres de app saneados): la rúbrica pide el ataque con su traza y el antes y el después, así que el ataque va primero.

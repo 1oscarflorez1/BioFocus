@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 import tempfile
 import unicodedata
 from collections import Counter, defaultdict
@@ -157,7 +158,23 @@ def _limites(desde: date, hasta: date) -> tuple[str, str]:
     return f"{desde.isoformat()} 00:00:00", f"{(hasta + timedelta(days=1)).isoformat()} 00:00:00"
 
 
-def _hay_demo(con, ini: str, fin: str) -> bool:
+# Origen de los datos que consulta el coach. Lo fija el código (la app, según lo que elige la persona), nunca
+# el modelo: así una sesión real y la semana demo del mismo día no se suman.
+ORIGENES = {"reales": 0, "demo": 1}
+
+
+def _origen(origen: str | None) -> tuple[str, tuple]:
+    """Filtro SQL sobre la tabla sesiones (alias s): vacío si origen es None (todas las sesiones)."""
+    if origen is None:
+        return "", ()
+    if origen not in ORIGENES:
+        raise ValueError(f"origen desconocido: {origen!r}")
+    return " AND s.es_demo = ?", (ORIGENES[origen],)
+
+
+def _hay_demo(con, ini: str, fin: str, origen: str | None = None) -> bool:
+    if origen is not None:
+        return origen == "demo"
     fila = con.execute(
         "SELECT COALESCE(MAX(es_demo), 0) FROM sesiones WHERE inicio >= ? AND inicio < ?", (ini, fin)
     ).fetchone()
@@ -209,42 +226,61 @@ def cargar_catalogo(ruta: Path = RUTA_CATALOGO) -> dict:
 # ---------------------------------------------------------------- herramientas
 
 
-def resumen_sesiones(desde: str, hasta: str, *, ruta_bd: str | Path | None = None) -> dict:
+def _sesiones_del_rango(con, ini: str, fin: str, origen: str | None):
+    """Sesiones que empezaron en el rango, con la última señal del monitor para las que siguen abiertas."""
+    f_sql, f_par = _origen(origen)
+    try:
+        return con.execute(
+            "SELECT s.id, s.inicio, s.fin, s.duracion_planeada_min, s.es_demo, e.actualizado FROM sesiones s "
+            f"LEFT JOIN estado_monitor e ON e.sesion_id = s.id WHERE s.inicio >= ? AND s.inicio < ?{f_sql} "
+            "ORDER BY s.inicio",
+            (ini, fin, *f_par),
+        ).fetchall()
+    except sqlite3.OperationalError:  # base de antes del monitor, sin la tabla estado_monitor
+        return con.execute(
+            "SELECT s.id, s.inicio, s.fin, s.duracion_planeada_min, s.es_demo, NULL AS actualizado FROM sesiones s "
+            f"WHERE s.inicio >= ? AND s.inicio < ?{f_sql} ORDER BY s.inicio",
+            (ini, fin, *f_par),
+        ).fetchall()
+
+
+def resumen_sesiones(desde: str, hasta: str, *, ruta_bd: str | Path | None = None, origen: str | None = None) -> dict:
     d, h = _rango(desde, hasta)
     ini, fin = _limites(d, h)
+    f_sql, f_par = _origen(origen)
     with closing(datos.conectar_lectura(ruta_bd)) as con:
-        sesiones = con.execute(
-            "SELECT id, inicio, fin, duracion_planeada_min, es_demo FROM sesiones "
-            "WHERE inicio >= ? AND inicio < ? ORDER BY inicio",
-            (ini, fin),
-        ).fetchall()
+        sesiones = _sesiones_del_rango(con, ini, fin, origen)
         conteos: dict[int, Counter] = defaultdict(Counter)
         for f in con.execute(
-            "SELECT sesion_id, tipo, COUNT(*) AS n, COALESCE(SUM(duracion_s), 0) AS s FROM eventos "
-            "WHERE sesion_id IN (SELECT id FROM sesiones WHERE inicio >= ? AND inicio < ?) "
+            "SELECT sesion_id, tipo, COUNT(*) AS n, COALESCE(SUM(duracion_s), 0) AS seg FROM eventos "
+            f"WHERE sesion_id IN (SELECT s.id FROM sesiones s WHERE s.inicio >= ? AND s.inicio < ?{f_sql}) "
             "AND tipo IN ('alerta_postura', 'alerta_distraccion', 'pausa') GROUP BY sesion_id, tipo",
-            (ini, fin),
+            (ini, fin, *f_par),
         ):
             conteos[f["sesion_id"]][f["tipo"]] = f["n"]
             if f["tipo"] == "pausa":
-                conteos[f["sesion_id"]]["pausa_s"] = f["s"]
-    filas = [
-        {
+                conteos[f["sesion_id"]]["pausa_s"] = f["seg"]
+    filas = []
+    for s in sesiones:
+        # Una sesión abierta cuenta hasta la última señal de vida del monitor (o nada, si nunca dio una).
+        fila = {
             "inicio": s["inicio"][:16],
-            "min": _minutos(s["inicio"], s["fin"]),
+            "min": _minutos(s["inicio"], s["fin"] or s["actualizado"]),
             "plan_min": s["duracion_planeada_min"],
             "alertas_postura": conteos[s["id"]]["alerta_postura"],
             "alertas_distraccion": conteos[s["id"]]["alerta_distraccion"],
             "pausas": conteos[s["id"]]["pausa"],
         }
-        for s in sesiones
-    ]
+        if s["fin"] is None:
+            fila["en_curso"] = True
+        filas.append(fila)
     total = sum(f["min"] for f in filas)
     return {
         "desde": d.isoformat(),
         "hasta": h.isoformat(),
-        "datos_demo": any(s["es_demo"] for s in sesiones),
+        "datos_demo": origen == "demo" if origen else any(s["es_demo"] for s in sesiones),
         "sesiones": len(filas),
+        "sesiones_en_curso": sum(1 for f in filas if f.get("en_curso")),
         "dias_del_rango": (h - d).days + 1,
         "dias_con_sesiones": len({f["inicio"][:10] for f in filas}),
         "minutos_reales": total,
@@ -259,19 +295,21 @@ def resumen_sesiones(desde: str, hasta: str, *, ruta_bd: str | Path | None = Non
     }
 
 
-def minutos_por_categoria(desde: str, hasta: str, *, ruta_bd: str | Path | None = None) -> dict:
+def minutos_por_categoria(desde: str, hasta: str, *, ruta_bd: str | Path | None = None, origen: str | None = None) -> dict:
     d, h = _rango(desde, hasta)
     ini, fin = _limites(d, h)
+    f_sql, f_par = _origen(origen)
     with closing(datos.conectar_lectura(ruta_bd)) as con:
         filas = con.execute(
-            "SELECT categoria, COALESCE(SUM(duracion_s), 0) AS s FROM eventos "
-            "WHERE tipo = 'ventana' AND ts >= ? AND ts < ? GROUP BY categoria",
-            (ini, fin),
+            "SELECT e.categoria, COALESCE(SUM(e.duracion_s), 0) AS seg FROM eventos e "
+            "JOIN sesiones s ON s.id = e.sesion_id "
+            f"WHERE e.tipo = 'ventana' AND e.ts >= ? AND e.ts < ?{f_sql} GROUP BY e.categoria",
+            (ini, fin, *f_par),
         ).fetchall()
-        demo = _hay_demo(con, ini, fin)
+        demo = _hay_demo(con, ini, fin, origen)
     segundos = {c: 0 for c in datos.CATEGORIAS}
     for f in filas:
-        segundos[f["categoria"]] = f["s"]
+        segundos[f["categoria"]] = f["seg"]
     total = sum(segundos.values())
     return {
         "desde": d.isoformat(),
@@ -283,32 +321,35 @@ def minutos_por_categoria(desde: str, hasta: str, *, ruta_bd: str | Path | None 
     }
 
 
-def distracciones_por_app(desde: str, hasta: str, top: int = 5, *, ruta_bd: str | Path | None = None) -> dict:
+def distracciones_por_app(desde: str, hasta: str, top: int = 5, *, ruta_bd: str | Path | None = None,
+                          origen: str | None = None) -> dict:
     d, h = _rango(desde, hasta)
     top = _entero(top, "top", 1, 10)
     ini, fin = _limites(d, h)
+    f_sql, f_par = _origen(origen)
     with closing(datos.conectar_lectura(ruta_bd)) as con:
         minutos = con.execute(
-            "SELECT app, SUM(duracion_s) AS s, COUNT(*) AS veces FROM eventos "
-            "WHERE tipo = 'ventana' AND categoria = 'no_sirve' AND ts >= ? AND ts < ? GROUP BY app",
-            (ini, fin),
+            "SELECT e.app, SUM(e.duracion_s) AS seg, COUNT(*) AS veces FROM eventos e "
+            "JOIN sesiones s ON s.id = e.sesion_id "
+            f"WHERE e.tipo = 'ventana' AND e.categoria = 'no_sirve' AND e.ts >= ? AND e.ts < ?{f_sql} GROUP BY e.app",
+            (ini, fin, *f_par),
         ).fetchall()
         alertas = {
             f["app"]: f["n"]
             for f in con.execute(
-                "SELECT app, COUNT(*) AS n FROM eventos "
-                "WHERE tipo = 'alerta_distraccion' AND ts >= ? AND ts < ? GROUP BY app",
-                (ini, fin),
+                "SELECT e.app, COUNT(*) AS n FROM eventos e JOIN sesiones s ON s.id = e.sesion_id "
+                f"WHERE e.tipo = 'alerta_distraccion' AND e.ts >= ? AND e.ts < ?{f_sql} GROUP BY e.app",
+                (ini, fin, *f_par),
             )
         }
-        demo = _hay_demo(con, ini, fin)
-    total_s = sum(f["s"] for f in minutos)
+        demo = _hay_demo(con, ini, fin, origen)
+    total_s = sum(f["seg"] for f in minutos)
     filas = sorted(
         (
             {
                 "app": _app_segura(f["app"]),
-                "minutos_no_sirve": round(f["s"] / 60, 1),
-                "porcentaje_del_tiempo_no_sirve": round(100 * f["s"] / total_s, 1) if total_s else 0.0,
+                "minutos_no_sirve": round(f["seg"] / 60, 1),
+                "porcentaje_del_tiempo_no_sirve": round(100 * f["seg"] / total_s, 1) if total_s else 0.0,
                 "veces": f["veces"],
                 "alertas_distraccion": alertas.get(f["app"], 0),
             }
@@ -326,23 +367,26 @@ def distracciones_por_app(desde: str, hasta: str, top: int = 5, *, ruta_bd: str 
     }
 
 
-def alertas_por_hora(tipo: str, desde: str, hasta: str, *, ruta_bd: str | Path | None = None) -> dict:
+def alertas_por_hora(tipo: str, desde: str, hasta: str, *, ruta_bd: str | Path | None = None,
+                     origen: str | None = None) -> dict:
     tipo = _opcion(tipo, "tipo", tuple(TIPOS_ALERTA))
     d, h = _rango(desde, hasta)
     ini, fin = _limites(d, h)
+    f_sql, f_par = _origen(origen)
     with closing(datos.conectar_lectura(ruta_bd)) as con:
         conteo = {
             int(f["hora"]): f["n"]
             for f in con.execute(
-                "SELECT CAST(substr(ts, 12, 2) AS INTEGER) AS hora, COUNT(*) AS n FROM eventos "
-                "WHERE tipo = ? AND ts >= ? AND ts < ? GROUP BY hora",
-                (TIPOS_ALERTA[tipo], ini, fin),
+                "SELECT CAST(substr(e.ts, 12, 2) AS INTEGER) AS hora, COUNT(*) AS n FROM eventos e "
+                f"JOIN sesiones s ON s.id = e.sesion_id WHERE e.tipo = ? AND e.ts >= ? AND e.ts < ?{f_sql} GROUP BY hora",
+                (TIPOS_ALERTA[tipo], ini, fin, *f_par),
             )
         }
         sesiones = con.execute(
-            "SELECT inicio, fin FROM sesiones WHERE inicio >= ? AND inicio < ? AND fin IS NOT NULL", (ini, fin)
+            f"SELECT s.inicio, s.fin FROM sesiones s WHERE s.inicio >= ? AND s.inicio < ? AND s.fin IS NOT NULL{f_sql}",
+            (ini, fin, *f_par),
         ).fetchall()
-        demo = _hay_demo(con, ini, fin)
+        demo = _hay_demo(con, ini, fin, origen)
     minutos_hora = _minutos_por_hora(sesiones)
     filas = []
     for hora in sorted(set(conteo) | set(minutos_hora)):
@@ -473,6 +517,7 @@ class Herramienta:
     funcion: Callable[..., dict]
     criterio: str  # cómo se calcula, en lenguaje humano
     usa_bd: bool = True
+    usa_origen: bool = False  # recibe el origen (reales o demo) que fija la app, no el modelo
     requiere_aprobacion: bool = False
 
 
@@ -504,6 +549,7 @@ REGISTRO: dict[str, Herramienta] = {
             },
             validar=_v_rango,
             funcion=resumen_sesiones,
+            usa_origen=True,
             criterio=(
                 "cuenta las sesiones que empezaron en el rango, suma sus minutos de inicio a fin y los "
                 "planeados, y cuenta sus alertas y pausas"
@@ -526,6 +572,7 @@ REGISTRO: dict[str, Herramienta] = {
             },
             validar=_v_rango,
             funcion=minutos_por_categoria,
+            usa_origen=True,
             criterio="suma la duración de cada ventana registrada según su categoría",
         ),
         Herramienta(
@@ -549,6 +596,7 @@ REGISTRO: dict[str, Herramienta] = {
             },
             validar=_v_distracciones,
             funcion=distracciones_por_app,
+            usa_origen=True,
             criterio=(
                 "suma por app los minutos en ventanas marcadas como «no sirve» y cuenta las alertas de "
                 "distracción de cada una"
@@ -575,6 +623,7 @@ REGISTRO: dict[str, Herramienta] = {
             },
             validar=_v_alertas,
             funcion=alertas_por_hora,
+            usa_origen=True,
             criterio=(
                 "cuenta las alertas por hora del día y las divide por los minutos de sesión de esa hora; la "
                 f"tasa solo compara horas con al menos {MIN_MINUTOS_PARA_TASA} min de sesión"
@@ -667,11 +716,15 @@ def validar(nombre: str, args: Any, *, ruta_bd: str | Path | None = None) -> dic
     return herramienta.validar(args, ruta_bd=ruta_bd)
 
 
-def ejecutar(nombre: str, args: Any, *, ruta_bd: str | Path | None = None, aprobado: bool = False) -> dict:
-    """Valida y ejecuta. guardar_regla solo escribe con aprobado=True."""
+def ejecutar(nombre: str, args: Any, *, ruta_bd: str | Path | None = None, aprobado: bool = False,
+             origen: str | None = None) -> dict:
+    """Valida y ejecuta. guardar_regla solo escribe con aprobado=True. `origen` (reales, demo o None = todas)
+    lo pone el código que llama, nunca el modelo."""
     kwargs = validar(nombre, args, ruta_bd=ruta_bd)
     herramienta = REGISTRO[nombre]
     extra: dict[str, Any] = {"ruta_bd": ruta_bd} if herramienta.usa_bd else {}
+    if herramienta.usa_origen:
+        extra["origen"] = origen
     if herramienta.requiere_aprobacion:
         extra["aprobado"] = aprobado
     return herramienta.funcion(**kwargs, **extra)

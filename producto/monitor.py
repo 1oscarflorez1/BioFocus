@@ -30,6 +30,7 @@ from datetime import datetime
 from pathlib import Path
 
 import datos
+import herramientas
 import ventanas
 import vivo
 
@@ -44,16 +45,21 @@ class Tiempos:
     postura_sostenida_s: float  # cuánto debe durar la caída antes de alertar
     distraccion_s: float  # segundos seguidos en no_sirve antes de alertar
     cooldown_s: float  # entre dos alertas del mismo tipo
+    rearme_s: float  # segundos seguidos en «bien» que rearman la alerta de postura aunque no vuelva a −10 %
+    pausa_min_s: float  # fuera de cuadro al menos esto cuenta como pausa
+    pausa_cada_s: float  # tras esto sin pausa, recuerda tomar una
 
 
-NORMAL = Tiempos(postura_sostenida_s=20, distraccion_s=60, cooldown_s=300)
-DEMO = Tiempos(postura_sostenida_s=5, distraccion_s=10, cooldown_s=30)
+NORMAL = Tiempos(postura_sostenida_s=20, distraccion_s=60, cooldown_s=300, rearme_s=10, pausa_min_s=60, pausa_cada_s=50 * 60)
+DEMO = Tiempos(postura_sostenida_s=5, distraccion_s=10, cooldown_s=30, rearme_s=3, pausa_min_s=10, pausa_cada_s=90)
 
 CALIBRACION_S = 5  # sentado derecho al inicio y con la tecla c
 MUESTRAS_MIN_CALIBRACION = 10
 DESCARTE_ARRANQUE_S = 1.0  # el primer segundo la cámara va lenta (experimento 01)
 CAIDA_ALERTA = 0.25  # alerta si el número cae más de 25 % bajo la línea base…
-REARME = 0.10  # …y se rearma al volver a menos de 10 % bajo la línea base
+REARME = 0.10  # …y se rearma al volver a menos de 10 % bajo la línea base, o tras rearme_s seguidos en «bien».
+# Por qué el rearme por tiempo: el experimento 01 midió −15 % al volver a sentarse derecho. Solo con el −10 %,
+# la alerta casi nunca se rearmaba y había una sola alerta por sesión (hallazgo 7 de la auditoría).
 SUAVIZADO_S = 0.5  # mediana de medio segundo, para que un cuadro suelto no corte la cuenta
 VISIBILIDAD_MIN = 0.5
 AVISO_S = 6  # cuánto queda el aviso grande en pantalla
@@ -101,6 +107,7 @@ class Postura:
         self.suavizado: float | None = None  # mediana del último medio segundo
         self.variacion: float | None = None  # fracción frente a la base (−0,27 = 27 % abajo)
         self.mal_desde: float | None = None
+        self.bien_desde: float | None = None  # desde cuándo está seguido en «bien» (para el rearme por tiempo)
         self.armada = True
         self.ultima_alerta = float("-inf")
         self._descartar_hasta = inicio + DESCARTE_ARRANQUE_S
@@ -110,6 +117,7 @@ class Postura:
 
     def recalibrar(self, t: float) -> None:
         self.base, self.estado, self.variacion, self.mal_desde, self.armada = None, "calibrando", None, None, True
+        self.bien_desde = None
         self._calibracion, self._calibrando_desde, self._descartar_hasta = [], None, t
 
     def falta_calibrar_s(self, t: float) -> float:
@@ -141,12 +149,13 @@ class Postura:
 
         if not self._muestras:
             self.estado, self.variacion, self.mal_desde, self.suavizado = "no_te_veo", None, None, None
+            self.bien_desde = None
             return False
         actual = statistics.median(v for _, v in self._muestras)
         self.suavizado = actual
         self.variacion = actual / self.base - 1
         if actual < self.base * (1 - CAIDA_ALERTA):
-            self.estado = "revisa"
+            self.estado, self.bien_desde = "revisa", None
             if self.mal_desde is None:
                 self.mal_desde = t
             if (
@@ -157,10 +166,56 @@ class Postura:
                 self.armada, self.ultima_alerta = False, t
                 return True
             return False
+        if self.estado != "bien" or self.bien_desde is None:
+            self.bien_desde = t
         self.estado, self.mal_desde = "bien", None
-        if actual >= self.base * (1 - REARME):
+        if actual >= self.base * (1 - REARME) or t - self.bien_desde >= self.t.rearme_s:
             self.armada = True
         return False
+
+
+class Pausas:
+    """Pausas y recordatorio de pausa.
+
+    - Si la persona sale de cuadro al menos pausa_min_s (con la línea base ya calibrada), al volver se registra
+      un evento `pausa` con su duración.
+    - Tras pausa_cada_s sin pausa (desde el inicio, la última pausa o el último recordatorio), recuerda tomar una.
+    """
+
+    def __init__(self, tiempos: Tiempos, inicio: float):
+        self.t = tiempos
+        self.ausente_desde: float | None = None
+        self.ultimo_corte = inicio
+        self.recordatorios = 0
+
+    def actualizar(self, t: float, ve_a_la_persona: bool, calibrada: bool) -> tuple[tuple[float, float] | None, bool]:
+        """Devuelve (pausa que terminó como (inicio, duración) o None, si toca recordar la pausa)."""
+        pausa = None
+        if ve_a_la_persona or not calibrada:
+            if self.ausente_desde is not None and t - self.ausente_desde >= self.t.pausa_min_s:
+                pausa = (self.ausente_desde, t - self.ausente_desde)
+                self.ultimo_corte = t
+            self.ausente_desde = None
+        elif self.ausente_desde is None:
+            self.ausente_desde = t
+        en_pausa = self.ausente_desde is not None and t - self.ausente_desde >= self.t.pausa_min_s
+        recordar = not en_pausa and t - self.ultimo_corte >= self.t.pausa_cada_s
+        if recordar:
+            self.ultimo_corte = t
+            self.recordatorios += 1
+        return pausa, recordar
+
+    def cerrar(self, t: float) -> tuple[float, float] | None:
+        """Al terminar la sesión: si la persona seguía fuera de cuadro lo suficiente, esa pausa también cuenta."""
+        if self.ausente_desde is not None and t - self.ausente_desde >= self.t.pausa_min_s:
+            return self.ausente_desde, t - self.ausente_desde
+        return None
+
+
+def pausa_sugerida(n: int) -> dict:
+    """Una pausa del catálogo fijo (motivo «general»), rotando con cada recordatorio. Nunca se inventa."""
+    pausas = [p for p in herramientas.cargar_catalogo()["pausas"] if "general" in p["motivos"]]
+    return pausas[n % len(pausas)]
 
 
 class CorteCamara:
@@ -214,7 +269,8 @@ def sonar(tipo: str) -> None:
         return
     import winsound
 
-    tonos = {"postura": [(660, 160), (520, 220)], "distraccion": [(880, 140), (1175, 220)]}[tipo]
+    tonos = {"postura": [(660, 160), (520, 220)], "distraccion": [(880, 140), (1175, 220)],
+             "pausa": [(523, 150), (659, 150), (784, 220)]}[tipo]
 
     def tocar() -> None:
         for frecuencia, ms in tonos:
@@ -400,6 +456,11 @@ class Registro:
                              app=tramo.clase.app, categoria=tramo.clase.categoria, duracion_s=tramo.duracion_s)
         self.con.commit()
 
+    def pausa(self, inicio: float, duracion_s: float) -> None:
+        datos.agregar_evento(self.con, self.id, _ts(inicio), "pausa", duracion_s=int(duracion_s),
+                             detalle="fuera de cuadro")
+        self.con.commit()
+
     def alerta(self, tipo: str, t: float, app: str | None = None, detalle: str = "") -> None:
         datos.agregar_evento(self.con, self.id, _ts(t), f"alerta_{tipo}", app=app,
                              categoria="no_sirve" if tipo == "distraccion" else None, detalle=detalle[: datos.MAX_DETALLE])
@@ -473,6 +534,7 @@ def correr(args: argparse.Namespace) -> int:
     hilo.start()
     postura = Postura(tiempos, time.time())
     distraccion = Distraccion(tiempos)
+    pausas = Pausas(tiempos, time.time())
     pantalla = None if args.sin_ventana else Pantalla()
     if pantalla:
         cv2.namedWindow(TITULO_VENTANA, cv2.WINDOW_NORMAL)
@@ -541,6 +603,18 @@ def correr(args: argparse.Namespace) -> int:
                 print(f"ALERTA postura a los {t - registro.inicio:.1f} s ({pct:+.0f} %)", flush=True)
                 if pantalla:
                     sonar("postura")
+            pausa, recordar = pausas.actualizar(t, valor is not None, postura.base is not None)
+            if pausa:
+                registro.pausa(*pausa)
+                print(f"PAUSA de {pausa[1]:.0f} s (fuera de cuadro)", flush=True)
+            if recordar:
+                sugerida = pausa_sugerida(pausas.recordatorios - 1)
+                aviso = {"tipo": "pausa", "hasta": t + AVISO_S, "color": COLOR_POSTURA["calibrando"],
+                         "titulo": "Toma una pausa",
+                         "detalle": f"{sugerida['nombre']} · {sugerida['duracion_min']} min: {sugerida['pasos'][0]}"[:75]}
+                print(f"RECORDATORIO de pausa a los {t - registro.inicio:.0f} s: {sugerida['nombre']}", flush=True)
+                if pantalla:
+                    sonar("pausa")
             if distraccion.revisar(t, foto.racha_no_sirve):
                 segundos = int(t - foto.racha_no_sirve)
                 registro.alerta("distraccion", t, app=foto.app,
@@ -601,6 +675,9 @@ def correr(args: argparse.Namespace) -> int:
     finally:
         for tramo in hilo.detener():
             registro.tramo(tramo)
+        final = pausas.cerrar(time.time())
+        if final and motivo != "la cámara dejó de entregar cuadros":  # sin imagen no es una pausa
+            registro.pausa(*final)
         registro.cerrar(time.time(), motivo)
         detector.close()
         fuente.release()

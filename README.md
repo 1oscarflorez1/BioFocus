@@ -81,10 +81,10 @@ Crea `data/biofocus.sqlite` con 7 días de sesiones sintéticas que terminan aye
 
 Abre http://localhost:8501. La app solo escucha en tu equipo.
 
-- **Iniciar sesión:**
+- **Empezar sesión de estudio:**
   1. Escribe la meta.
   2. Elige la duración, el modo demo (tiempos cortos) y la imagen: la cámara, o un video de `grabaciones/` como plan B.
-  3. Presiona «Iniciar sesión». La app lanza el monitor como proceso aparte y se abre la ventana «BioFocus monitor», siempre encima de las demás.
+  3. Presiona «Empezar sesión de estudio». La app lanza el monitor como proceso aparte y se abre la ventana «BioFocus monitor», siempre encima de las demás.
 - **Panel en vivo:** se actualiza cada 2 s mientras hay una sesión. Muestra:
   - la meta y el tiempo;
   - la ventana actual y su categoría;
@@ -97,7 +97,11 @@ Abre http://localhost:8501. La app solo escucha en tu equipo.
 - **Fuente y criterio:** qué herramienta se usó, con qué fechas y cómo se calculó, en lenguaje humano.
 - **Traza técnica:** desplegable con cada paso en orden y su duración (llamadas al modelo, herramientas, reintentos, cambios de proveedor, validaciones).
 - **Aprobar y Rechazar:** si pides algo como "marca WhatsApp como no sirve", el coach propone la regla y solo se guarda en `data/reglas.json` si la apruebas.
-- **Barra lateral:** proveedor activo (se cambia en vivo), interruptores de prueba, y por separado las **sesiones reales** y la **semana de datos demo**.
+- **¿Sobre qué datos pregunto?:** encima del chat eliges «Mis sesiones reales» o «Semana de datos demo». El coach solo consulta esos datos: las dos cosas nunca se suman. «¿Cómo va mi sesión?» siempre mira la sesión real.
+- **Barra lateral:**
+  - «Opciones técnicas» (plegadas): proveedor activo, que se cambia en vivo, e interruptores de prueba;
+  - por separado, las **sesiones reales** y la **semana de datos demo**;
+  - **Borrar mis datos:** sesiones reales, semana demo, trazas del coach, reglas aprobadas o el registro del monitor. Hay que escribir BORRAR, y no se puede deshacer.
 
 ## Sesión en vivo desde la terminal
 Si lanzar el monitor desde la app da problemas, inícialo desde la terminal; la app lo muestra igual (recarga la página):
@@ -110,21 +114,25 @@ Si lanzar el monitor desde la app da problemas, inícialo desde la terminal; la 
 
 - **Teclas** en la ventana de la cámara: `c` recalibra y `q` termina. También termina al cerrar esa ventana, con «Terminar sesión» en la app o con Ctrl+C. En todos los casos escribe `fin_sesion` y cierra limpio.
 - **Calibración:** los primeros 5 s, sentado derecho y con los hombros a la vista. Se descarta el primer segundo.
-- **Postura:** el número es (y medio de los hombros − y de la nariz) / ancho de los hombros. Hay alerta si cae más de 25 % bajo tu línea base durante 20 s, y se rearma al volver a −10 %. Si no ve nariz y hombros, dice «no te veo» y no alerta.
+- **Postura:** el número es (y medio de los hombros − y de la nariz) / ancho de los hombros. Hay alerta si cae más de 25 % bajo tu línea base durante 20 s. Se rearma al volver a −10 % o tras 10 s seguidos en «bien». Si no ve nariz y hombros, dice «no te veo» y no alerta.
 - **Ventana:** se lee cada 2 s y cuenta cuando llevas al menos 5 s fuera de la anterior, aunque el título cambie mientras tanto (un temporizador, un contador de mensajes). Las reglas fijas están en `producto/reglas.json` (privados, neutros y distracciones fijas) y las reglas que apruebas en el coach, en `data/reglas.json`. Lo ambiguo lo decide Groq según la meta, con dos límites: una consulta por título equivalente (los que solo cambian en números o símbolos comparten la respuesta) y máximo 6 consultas por minuto; pasado ese tope, la ventana queda sin clasificar.
 - **Distracción:** hay alerta tras 60 s seguidos en ventanas que no sirven.
 - **Entre alertas del mismo tipo:** pasan al menos 5 min.
+- **Pausas:** salir de cuadro 60 s o más cuenta como pausa y queda en la base. Tras 50 min sin pausa, el monitor lo recuerda con un cartel y una pausa del catálogo.
 
 | Tiempo | Normal | `--modo-demo` |
 |---|---|---|
 | Postura sostenida antes de alertar | 20 s | 5 s |
 | Seguidos en «no sirve» antes de alertar | 60 s | 10 s |
+| Seguidos en «bien» para rearmar la alerta de postura | 10 s | 3 s |
+| Fuera de cuadro para que cuente como pausa | 60 s | 10 s |
+| Sin pausa antes del recordatorio | 50 min | 90 s |
 | Entre dos alertas del mismo tipo | 5 min | 30 s |
 
 `--video` es el plan B sin cámara: lee el video una vez, a su ritmo, y al terminar cierra la sesión; la ventana activa se sigue leyendo en vivo. La sesión queda como real (`es_demo = 0`) aunque uses `--modo-demo`. Para probar sin ventana ni sonido: `--sin-ventana`. Para ver cada segundo el número de postura, la base y el estado: `--detalle`.
 
 ## Prueba de 3 minutos (modo demo)
-En la app: meta «Repasar integración por partes», duración 3, modo demo encendido e imagen «Cámara». Presiona «Iniciar sesión». Pon la ventana «BioFocus monitor» en una esquina, donde no tape lo que vas a mostrar.
+En la app: meta «Repasar integración por partes», duración 3, modo demo encendido e imagen «Cámara». Presiona «Empezar sesión de estudio». Pon la ventana «BioFocus monitor» en una esquina, donde no tape lo que vas a mostrar.
 
 | Minuto | Qué hacer | Qué debe pasar |
 |---|---|---|
@@ -149,7 +157,7 @@ Si la cámara falla, vuelve a empezar con la imagen `encorvado.mp4` (plan B). La
 `--traza` imprime la traza completa en JSON. Cada pregunta queda además en `traces/AAAA-MM-DD.jsonl`, que git ignora.
 
 ## Interruptores de prueba
-Están en la barra lateral, y en consola con `--forzar-429`, `--forzar-timeout` y `--forzar-salida-invalida`. Los casos forzados no salen a la red.
+Están en la barra lateral, dentro de «Opciones técnicas», y en consola con `--forzar-429`, `--forzar-timeout` y `--forzar-salida-invalida`. Los casos forzados no salen a la red.
 
 | Interruptor | Qué pasa |
 |---|---|
@@ -172,7 +180,7 @@ Si se alcanza un límite, la respuesta lo dice. El porqué de cada uno está com
 .venv\Scripts\python -m unittest discover -s tests
 ```
 
-Son 72 pruebas y no usan red, llaves ni cámara:
+Son 89 pruebas y no usan red, llaves ni cámara:
 - un servidor falso en `127.0.0.1` imita al proveedor;
 - el monitor se prueba con números de postura y un LLM falso.
 

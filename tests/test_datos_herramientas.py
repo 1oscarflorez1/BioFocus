@@ -169,6 +169,40 @@ class TestHerramientas(ConDemo):
             self.assertEqual(con.execute("SELECT COUNT(*) FROM estado_monitor").fetchone()[0], 0)
         self.assertNotIn(b"meta privada", ruta.read_bytes(), "lo borrado no queda en el archivo")
 
+    def test_demo_y_real_no_se_suman(self):
+        ruta = Path(self.tmp.name) / "mezcla.sqlite"
+        with closing(datos.conectar(ruta)) as con:
+            demo = datos.crear_sesion(con, "2026-11-10 09:00:00", "2026-11-10 10:00:00", "m", 60, es_demo=True)
+            real = datos.crear_sesion(con, "2026-11-10 15:00:00", "2026-11-10 15:30:00", "m", 30)
+            for sid, hora in ((demo, "09:10"), (demo, "09:20"), (real, "15:10")):
+                datos.agregar_evento(con, sid, f"2026-11-10 {hora}:00", "alerta_postura", detalle="x")
+            datos.agregar_evento(con, demo, "2026-11-10 09:00:00", "ventana", app="WhatsApp", categoria="no_sirve", duracion_s=600)
+            datos.agregar_evento(con, real, "2026-11-10 15:00:00", "ventana", app="VS Code", categoria="sirve", duracion_s=1800)
+            datos.agregar_evento(con, real, "2026-11-10 15:05:00", "alerta_distraccion", app="YouTube", categoria="no_sirve", detalle="x")
+            con.commit()
+        rango = {"desde": "2026-11-10", "hasta": "2026-11-10"}
+        reales = h.ejecutar("resumen_sesiones", rango, ruta_bd=ruta, origen="reales")
+        self.assertEqual((reales["sesiones"], reales["minutos_reales"], reales["alertas_postura"], reales["datos_demo"]), (1, 30, 1, False))
+        solo_demo = h.ejecutar("resumen_sesiones", rango, ruta_bd=ruta, origen="demo")
+        self.assertEqual((solo_demo["sesiones"], solo_demo["alertas_postura"], solo_demo["datos_demo"]), (1, 2, True))
+        self.assertEqual(h.ejecutar("minutos_por_categoria", rango, ruta_bd=ruta, origen="reales")["minutos"]["no_sirve"], 0.0)
+        self.assertEqual([f["app"] for f in h.ejecutar("distracciones_por_app", rango, ruta_bd=ruta, origen="demo")["top"]], ["WhatsApp"])
+        horas = h.ejecutar("alertas_por_hora", {"tipo": "postura", **rango}, ruta_bd=ruta, origen="reales")
+        self.assertEqual(horas["total_alertas"], 1)
+        self.assertEqual(h.ejecutar("resumen_sesiones", rango, ruta_bd=ruta)["sesiones"], 2, "sin origen, como antes: todas")
+        with self.assertRaises(ValueError):
+            h.ejecutar("resumen_sesiones", rango, ruta_bd=ruta, origen="todo")
+
+    def test_la_sesion_en_curso_cuenta_hasta_la_ultima_senal(self):
+        ruta = Path(self.tmp.name) / "en_curso.sqlite"
+        with closing(datos.conectar(ruta)) as con:
+            sid = datos.crear_sesion(con, "2026-11-11 09:00:00", None, "m", 60)
+            con.execute("INSERT INTO estado_monitor (sesion_id, actualizado) VALUES (?, '2026-11-11 09:42:00')", (sid,))
+            con.commit()
+        r = h.ejecutar("resumen_sesiones", {"desde": "2026-11-11", "hasta": "2026-11-11"}, ruta_bd=ruta, origen="reales")
+        self.assertEqual((r["minutos_reales"], r["sesiones_en_curso"]), (42, 1))
+        self.assertTrue(r["detalle_sesiones"][0]["en_curso"])
+
     def test_descripciones_como_prompt(self):
         esquemas = h.esquemas()
         self.assertEqual(len(esquemas), 7)

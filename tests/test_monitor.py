@@ -65,14 +65,24 @@ class TestPostura(unittest.TestCase):
         self.assertEqual(len(alertas), 1)
         self.assertFalse(p.armada)
 
-    def test_entre_10_y_25_por_ciento_ni_alerta_ni_rearma(self):
+    def test_entre_10_y_25_por_ciento_no_alerta_y_rearma_por_tiempo(self):
         p, t = self.calibrada()
         t, alertas = alimentar(p, t, 7.0, 0.38)
         self.assertEqual(len(alertas), 1)
-        t, alertas = alimentar(p, t, 40.0, 0.46)  # −15 %: bien, pero sin rearmar (pasado el cooldown)
+        t, alertas = alimentar(p, t, 2.0, 0.46)  # −15 %: «bien», todavía sin rearmar (rearme a los 3 s en demo)
         self.assertEqual((p.estado, p.armada, alertas), ("bien", False, []))
+        t, alertas = alimentar(p, t, 38.0, 0.46)  # sigue en −15 %, que es como vuelve una persona (experimento 01)
+        self.assertEqual((p.estado, p.armada, alertas), ("bien", True, []), "se rearma por tiempo, sin alerta")
         t, alertas = alimentar(p, t, 7.0, 0.38)
-        self.assertEqual(alertas, [], "sin volver a −10 % no hay segunda alerta")
+        self.assertEqual(len(alertas), 1, "pasado el cooldown, la segunda caída vuelve a alertar")
+
+    def test_el_rearme_por_tiempo_pide_segundos_seguidos_en_bien(self):
+        p, t = self.calibrada()
+        t, _ = alimentar(p, t, 7.0, 0.38)
+        for _ in range(10):  # vaivén: 2 s bien, 1 s revisa; nunca 3 s seguidos en «bien»
+            t, _ = alimentar(p, t, 2.0, 0.46)
+            t, _ = alimentar(p, t, 1.0, 0.38)
+        self.assertFalse(p.armada)
 
     def test_rearma_al_volver_y_respeta_cooldown(self):
         p, t = self.calibrada()
@@ -110,8 +120,48 @@ class TestPostura(unittest.TestCase):
         self.assertAlmostEqual(p.base, 0.46, places=3)
 
     def test_tiempos_normales(self):
-        self.assertEqual(monitor.NORMAL, monitor.Tiempos(20, 60, 300))
-        self.assertEqual(monitor.DEMO, monitor.Tiempos(5, 10, 30))
+        self.assertEqual(monitor.NORMAL, monitor.Tiempos(20, 60, 300, 10, 60, 3000))
+        self.assertEqual(monitor.DEMO, monitor.Tiempos(5, 10, 30, 3, 10, 90))
+
+
+class TestPausas(unittest.TestCase):
+    def test_salir_de_cuadro_10_s_en_demo_es_una_pausa(self):
+        p = monitor.Pausas(monitor.DEMO, inicio=0.0)
+        self.assertEqual(p.actualizar(5.0, True, True), (None, False))
+        p.actualizar(6.0, False, True)
+        self.assertEqual(p.actualizar(12.0, True, True), (None, False), "6 s fuera no es pausa")
+        p.actualizar(20.0, False, True)
+        pausa, _ = p.actualizar(31.0, True, True)
+        self.assertEqual(pausa, (20.0, 11.0))
+
+    def test_antes_de_calibrar_no_cuenta(self):
+        p = monitor.Pausas(monitor.DEMO, inicio=0.0)
+        p.actualizar(0.0, False, False)
+        self.assertEqual(p.actualizar(30.0, True, True), (None, False))
+
+    def test_recuerda_la_pausa_tras_90_s_en_demo_y_se_reinicia(self):
+        p = monitor.Pausas(monitor.DEMO, inicio=0.0)
+        self.assertEqual(p.actualizar(89.0, True, True), (None, False))
+        self.assertEqual(p.actualizar(90.0, True, True), (None, True))
+        self.assertEqual(p.actualizar(100.0, True, True), (None, False), "un recordatorio, no uno por cuadro")
+        p.actualizar(150.0, False, True)  # se levanta a los 150 s…
+        pausa, recordar = p.actualizar(175.0, False, True)
+        self.assertEqual((pausa, recordar), (None, False), "fuera de cuadro no se le recuerda la pausa")
+        pausa, _ = p.actualizar(200.0, True, True)  # …y vuelve: la pausa cuenta y el reloj empieza otra vez
+        self.assertEqual(pausa, (150.0, 50.0))
+        self.assertEqual(p.actualizar(289.0, True, True), (None, False))
+        self.assertEqual(p.actualizar(290.0, True, True), (None, True))
+
+    def test_cerrar_cuenta_la_pausa_en_curso(self):
+        p = monitor.Pausas(monitor.DEMO, inicio=0.0)
+        p.actualizar(10.0, False, True)
+        self.assertEqual(p.cerrar(15.0), None)
+        self.assertEqual(p.cerrar(25.0), (10.0, 15.0))
+
+    def test_la_pausa_sugerida_sale_del_catalogo(self):
+        nombres = {monitor.pausa_sugerida(i)["nombre"] for i in range(10)}
+        catalogo = {p["nombre"] for p in monitor.herramientas.cargar_catalogo()["pausas"] if "general" in p["motivos"]}
+        self.assertEqual(nombres, catalogo)
 
 
 class TestCorteCamara(unittest.TestCase):
@@ -464,6 +514,14 @@ class TestBaseEnVivo(unittest.TestCase):
             self.assertIsNotNone(s["fin"])
             fin = con.execute("SELECT detalle FROM eventos WHERE tipo = 'fin_sesion'").fetchone()[0]
             self.assertEqual(fin, "terminada desde la app")
+
+    def test_registro_de_una_pausa(self):
+        r = monitor.Registro(self.bd, "Repasar cálculo", 3, modo_demo=True)
+        r.pausa(time.time() - 30, 25.4)
+        r.cerrar(time.time(), "tecla q")
+        with closing(datos.conectar_lectura(self.bd)) as con:
+            fila = con.execute("SELECT duracion_s, detalle FROM eventos WHERE tipo = 'pausa'").fetchone()
+        self.assertEqual((fila["duracion_s"], fila["detalle"]), (25, "fuera de cuadro"))
 
     def test_la_app_lee_mientras_el_monitor_escribe(self):
         escritor = datos.conectar(self.bd)
