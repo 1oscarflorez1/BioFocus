@@ -1,0 +1,38 @@
+# Respuesta a la auditoría · BioFocus
+
+**La auditoría cruzada no se hizo: la sesión no se realizó y no hay reporte de otro equipo.** No se inventa uno. En su lugar se responden los 15 hallazgos de la auditoría propia del 2026-11-11: se leyó todo el repositorio y cada hallazgo se reprodujo antes de tocarlo (`docs/PLAN-M3.md`, sección final, y `docs/decisiones/m3-decisiones.md`).
+
+Cada hallazgo lleva una de las tres respuestas del curso: **lo arreglamos** (con su commit), **lo asumimos** (y por qué) o **no estamos de acuerdo** (con evidencia). Si un arreglo todavía no tiene commit, se dice así: no se da por hecho lo que no está hecho.
+
+Fecha de esta versión: 2026-11-17.
+
+## Los 15 hallazgos
+
+| # | Hallazgo | Respuesta | Evidencia |
+|---|---|---|---|
+| 1 | Una ventana cuyo título cambia en cada lectura nunca contaba: 2 min de trabajo quedaban como YouTube y la racha de distracción seguía | **Lo arreglamos** | Commit `169bad9`. La ventana nueva se sigue por su proceso (`ventanas.py`, `SeguidorVentanas.observar`). Pruebas `test_una_ventana_cuyo_titulo_cambia_en_cada_lectura_igual_cuenta` y `test_el_titulo_de_la_ventana_actual_puede_cambiar_sin_partir_el_tramo` |
+| 2 | Si la cámara no entregaba el primer cuadro, la sesión terminaba al instante (sesión 21 del 2026-10-31, 0 s) | **Lo arreglamos** | Commit `169bad9`. Tolera 10 s sin imagen y reabre la cámara una vez (`monitor.py`, clase `CorteCamara`). Probado con una cámara falsa y con la cámara real el 2026-11-17 |
+| 3 | Si el monitor se caía, se perdía el tramo de ventana en curso: 2 h quedaban en 0 min | **Lo arreglamos** | Commit `169bad9`. `vivo.cerrar_sin_monitor` guarda el tramo, sin duplicarlo si el monitor despierta. Pruebas `test_al_cerrar_sin_monitor_se_guarda_el_tramo_en_curso` y `test_el_monitor_no_duplica_el_tramo_que_guardo_el_cierre_sin_monitor` |
+| 4 | Una meta de una sola palabra que empieza por guion no arrancaba el monitor | **Lo arreglamos** | Commit `169bad9`. La app pasa `--meta=valor` (`app.py`, `iniciar_monitor`). Prueba `test_una_meta_que_empieza_por_guion_no_se_toma_por_opcion` |
+| 5 | El coach sumaba sesiones demo y reales del mismo día | **Pendiente: no está arreglado.** Va en la tarea B1, aprobada el 2026-11-17 | Reproducido en base temporal: 1 sesión real de 30 min con 1 alerta salía como 2 sesiones, 90 min y 3 alertas (`docs/PLAN-M3.md`, hallazgo 5). Sin commit todavía |
+| 6 | La sesión en curso contaba 0 min en `resumen_sesiones`, y las pausas daban siempre 0 en sesiones reales | **Pendiente: no está arreglado.** Tareas B2 y B4 | `herramientas.py`, `_minutos` devuelve 0 si la sesión no tiene fin; el monitor nunca escribe eventos `pausa`. Sin commit todavía |
+| 7 | La alerta de postura solo se rearmaba al volver a −10 %; en la práctica, una alerta por sesión | **Pendiente: no está arreglado.** Tarea B3 | `monitor.py`, `Postura.actualizar`: rearma solo por encima de −10 %, y el experimento 01 midió −15 % al volver a sentarse. Sin commit todavía |
+| 8 | La respuesta del coach se pintaba como markdown: una imagen o un enlace sacaban datos | **Lo arreglamos** | Commit `1333c59`. Antes del arreglo el ataque `imagen_markdown` funcionó 3/3 (traza `6ff67bd00129`); después, 0/3; y sin la regla 7 del prompt, el código quitó la imagen 3/3 (traza `2c2499dddcaa`). `agente.limpiar_salida` (`agente.py:120`). `docs/seguridad.md`, sección 3 |
+| 9 | El filtro de títulos con instrucciones es una lista de patrones: 7 de 8 frases de prueba pasaban al modelo | **Lo asumimos**, con un refuerzo | Commit `1333c59`: cinco patrones más y una línea en el prompt; los resultados de los títulos están en `docs/seguridad.md`, sección 3. Lo asumimos porque una lista siempre tiene huecos, y lo peor que logra un título es que una ventana cuente como `sirve`: una alerta menos. La salida del clasificador es un conjunto cerrado y no guarda ni manda nada más (`ventanas.py:314`) |
+| 10 | El nombre de un ejecutable llegaba tal cual al coach (39 caracteres de instrucciones) | **Lo arreglamos** | Commit `1333c59`. Alfabeto cerrado y máximo 30 caracteres al guardar (`ventanas.py:258`) y al dárselo al modelo (`herramientas.py:171`). Los ataques `app_pide_regla` y `app_pide_mentir` fallaron antes y después |
+| 11 | No había tope de consultas del clasificador | **Lo arreglamos** | Commit `169bad9`. Una consulta por título equivalente y máximo 6 por minuto (`ventanas.py:45`). Prueba `test_tope_de_consultas_al_llm_por_minuto` |
+| 12 | No se podían borrar datos desde la app; trazas y `monitor.log` crecían sin tope | **Lo arreglamos** | Commit `1333c59`. «Borrar mis datos» con BORRAR escrito (`app.py:380`); SQLite sobrescribe lo borrado (`datos.py:150`). Trazas: 30 días (`trazas.py:22`). Registro: 512 KB (`app.py:43`) |
+| 13 | La ventana del monitor tapa el trabajo y la app abre con valores de demo | **Lo asumimos por ahora** | Las tareas B5 y B6 van al final, si queda tiempo antes del 19. La ventana siempre encima es justo lo que hace visible la alerta durante la demo, y los valores de demo (3 min, tiempos cortos) son los que usa la demo en vivo. Para el uso diario estorban, y queda escrito |
+| 14 | Faltaban la spec, seguridad, gobernanza, respuesta a la auditoría, cifras finales, skill y prueba del compañero; `permisos.md` y `settings.json` hablaban de `pytest` | **Lo arreglamos en parte** | Hecho: `.claude/settings.json` y `permisos.md` con `unittest` (commit `1333c59`), `docs/seguridad.md` (commit `1333c59`), `docs/SPEC.md`, `docs/gobernanza.md`, este documento y la plantilla de la prueba (commit de este documento). Pendiente: las cifras finales (`docs/decisiones/semana14.md`, tarea E2), el skill (F3) y la prueba hecha por una persona ajena (F2) |
+| 15 | La línea base de la semana 10 es del coach con 6 herramientas; `sesion_actual` no estaba medida | **Pendiente; se medirá aparte** | Los 12 casos de la línea base no se tocan, para que la comparación sea justa. `sesion_actual` y los ataques van como casos aparte (tarea E1). Sin commit todavía |
+
+## Lista de la semana 13
+
+| Fila | ¿Cumple? | Evidencia |
+|---|---|---|
+| **Autonomía:** ¿está acotado lo que el sistema hace solo? | **Sí** | El coach solo lee: base en solo lectura (`datos.py:95`) y consultas fijas. La única herramienta que escribe, `guardar_regla`, solo propone (`agente.py:318`). El clasificador solo elige entre `sirve` y `no_sirve` (`ventanas.py:314`). `docs/gobernanza.md`, pregunta 1 |
+| **Límites:** ¿hay tope de iteraciones, gasto y tiempo? | **Sí** | Coach: 6 vueltas, 12 000 tokens, 20 s por llamada y 5 s por herramienta (`agente.py:34` a `agente.py:55`). Clasificador: 6 consultas por minuto y 5 s (`ventanas.py:45`) |
+| **Trazabilidad:** ¿se puede reconstruir qué pasó? | **Sí en el coach; no del todo en el clasificador** | Cada pregunta deja sus spans en `traces/` (30 días) y se ve en la app. Las clasificaciones de ventanas no dejan traza a propósito: guardarla sería guardar el título. Solo quedan la app, la categoría y la duración |
+| **Datos:** ¿se sabe qué datos salen y a quién? | **Sí** | `docs/gobernanza.md`, pregunta 4: el camino base → prompt → proveedor de cada dato, y lo que nunca sale |
+| **Tríada:** ¿se evaluó y se cerró una pata? | **Sí** | `docs/seguridad.md`, sección 2: el coach tenía las tres; se cerró la salida por la pantalla en código y se midió antes y después |
+| **Incidente:** ¿hay un plan si causa daño? | **Sí, escrito; no ensayado** | `docs/gobernanza.md`, pregunta 5: quién se entera, cómo se apaga en cuatro niveles, qué se revisa y a quién se avisa. El único incidente real fue el de las llaves de octubre: cambiadas el 2026-11-13 y revisada la historia (`docs/seguridad.md`, sección 4) |
