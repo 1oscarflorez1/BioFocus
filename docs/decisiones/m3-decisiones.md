@@ -93,6 +93,16 @@ Detalle completo en `docs/seguridad.md`. Aquí van las decisiones menores.
   - Los tres videos dan lo mismo que en el Momento 2: `derecho` y `distraido` sin alertas; `encorvado`, una alerta de postura a los 16,5 s.
   - La app cargada sin excepciones.
 
+## B6 y B7 (2026-11-18)
+- **B6 · Abrir y empezar.**
+  - `BioFocus.bat` abre la app con doble clic (`--server.headless false`, para que abra el navegador).
+  - La app recuerda en `data/preferencias.json` la duración, el modo y la imagen de la última sesión, sin la meta. Sin preferencias guardadas propone 50 min con tiempos normales: es para el uso diario, no para la demo.
+  - Para la final hay que dejar una vez 3 min y modo demo (`docs/sustentacion.md`).
+- **B7 · Resumen.**
+  - El resumen de la sesión al cerrarla ya existía: el panel «Última sesión real». Ahora muestra también las pausas.
+  - Se agregaron los totales de hoy y de los últimos 7 días, solo de sesiones reales terminadas (`vivo.totales_reales`), en la barra lateral.
+  - No se hizo un informe aparte: el coach ya responde por rangos de fechas.
+
 ## Lo que no toqué, y por qué
 - Los bloques B a G del plan: están propuestos y esperan aprobación.
 - Los arreglos de seguridad (respuesta del coach sin imágenes ni enlaces, nombres de app saneados): la rúbrica pide el ataque con su traza y el antes y el después, así que el ataque va primero.

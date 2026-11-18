@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import altair as alt
@@ -37,6 +37,8 @@ st.set_page_config(page_title="BioFocus · Coach", page_icon="🧭", layout="wid
 RAIZ = Path(__file__).resolve().parent.parent
 MONITOR = Path(__file__).resolve().parent / "monitor.py"
 LOG_MONITOR = RAIZ / "data" / "monitor.log"
+PREFERENCIAS = RAIZ / "data" / "preferencias.json"  # duración, modo e imagen de la última sesión (sin la meta)
+POR_DEFECTO = {"duracion": 50, "modo_demo": False, "imagen": "Cámara"}  # uso diario: 50 min y tiempos normales
 GRABACIONES = RAIZ / "grabaciones"
 ARRANQUE_MAX_S = 40  # MediaPipe y la cámara tardan unos segundos en abrir
 PARADA_MAX_S = 12
@@ -69,6 +71,27 @@ if "chat" not in st.session_state:
 
 def _bd():
     return closing(datos.conectar())  # crea el esquema si falta; modo WAL
+
+
+def cargar_preferencias() -> dict:
+    """La duración, el modo y la imagen de la última sesión; si no hay, los de uso diario."""
+    try:
+        guardadas = json.loads(PREFERENCIAS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        guardadas = {}
+    pref = {**POR_DEFECTO, **{k: v for k, v in guardadas.items() if k in POR_DEFECTO}}
+    if not isinstance(pref["duracion"], int) or not 1 <= pref["duracion"] <= 600:
+        pref["duracion"] = POR_DEFECTO["duracion"]
+    pref["modo_demo"] = bool(pref["modo_demo"])
+    return pref
+
+
+def guardar_preferencias(duracion: int, modo_demo: bool, imagen: str) -> None:
+    try:
+        PREFERENCIAS.parent.mkdir(parents=True, exist_ok=True)
+        PREFERENCIAS.write_text(json.dumps({"duracion": duracion, "modo_demo": modo_demo, "imagen": imagen}), encoding="utf-8")
+    except OSError:
+        pass  # sin preferencias la app sigue igual
 
 
 def _mmss(segundos: float) -> str:
@@ -205,16 +228,21 @@ def controles_de_sesion() -> bool:
         st.info(AVISO_INICIO, icon="📷")
         meta = st.text_input("¿Qué quieres lograr en esta sesión?", placeholder="Ej.: repasar integración por partes",
                              max_chars=200)
+        pref = cargar_preferencias()  # lo de la última sesión: abrir y empezar es una meta y un clic
+        imagenes = ["Cámara"] + [v.name for v in videos]
         c1, c2, c3 = st.columns([1, 1, 2])
-        duracion = c1.number_input("Duración (min)", min_value=1, max_value=600, value=3)
-        demo = c2.toggle("Modo demo", value=True, help="Postura 5 s, distracción 10 s y 30 s entre alertas del mismo tipo.")
-        fuente = c3.selectbox("Imagen", ["Cámara"] + [v.name for v in videos],
+        duracion = c1.number_input("Duración (min)", min_value=1, max_value=600, value=pref["duracion"])
+        demo = c2.toggle("Modo demo", value=pref["modo_demo"],
+                         help="Postura 5 s, distracción 10 s y 30 s entre alertas del mismo tipo.")
+        fuente = c3.selectbox("Imagen", imagenes,
+                              index=imagenes.index(pref["imagen"]) if pref["imagen"] in imagenes else 0,
                               help="Plan B: un video de grabaciones/ en vez de la cámara.")
         if st.form_submit_button(BOTON_EMPEZAR, type="primary"):
             if not meta.strip():
                 st.error("Escribe la meta: el monitor la usa para decidir qué ventanas sirven.")
                 return
             video = GRABACIONES / fuente if fuente != "Cámara" else None
+            guardar_preferencias(int(duracion), bool(demo), fuente)
             with st.spinner("Abriendo el monitor (cámara y MediaPipe)… siéntate derecho para calibrar."):
                 error = iniciar_monitor(meta.strip(), int(duracion), demo, video)
             st.session_state.aviso_sesion = error or "Sesión iniciada. La ventana «BioFocus monitor» muestra la cámara; q la termina y c recalibra."
@@ -309,6 +337,8 @@ def panel_en_vivo() -> None:
     else:
         c3.metric("Postura", "—")
     c4.metric("Alertas", f"{r['alertas_postura']} · {r['alertas_distraccion']}", "postura · distracción", delta_color="off")
+    if r["pausas"]:
+        st.caption(f"Pausas en esta sesión: {r['pausas']} (salir de cuadro {'10 s' if r['modo_demo'] else '1 min'} o más).")
 
     if r["alertas"]:
         a = r["alertas"][-1]
@@ -338,6 +368,13 @@ def panel_origen(es_demo: bool) -> None:
     with _bd() as con:
         r = vivo.resumen_por_origen(con, es_demo)
         reales = [] if es_demo else vivo.sesiones_reales(con)
+        hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        totales = [] if es_demo else [("Hoy", vivo.totales_reales(con, hoy)),
+                                      ("Últimos 7 días", vivo.totales_reales(con, hoy - timedelta(days=6)))]
+    for nombre, tot in totales:
+        st.caption(f"**{nombre}:** {tot['sesiones']} sesiones · {tot['minutos']} min · "
+                   f"{tot['alertas_postura']} alertas de postura · {tot['alertas_distraccion']} de distracción · "
+                   f"{tot['pausas']} pausas")
     if not r["sesiones"]:
         st.caption("Sin sesiones." if not es_demo else "Sin datos demo. Genéralos con `python producto/generar_datos_demo.py`.")
         return

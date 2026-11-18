@@ -43,9 +43,9 @@ Límites que el coach no puede saltarse: 6 vueltas del bucle (`agente.py:34`), 1
 
 | Acción | Cómo lo exige el código |
 |---|---|
-| Guardar una regla (`guardar_regla`) | El bucle se detiene y devuelve la propuesta sin ejecutarla (`agente.py:332`). La función se niega a escribir sin `aprobado=True` (`herramientas.py:494`). El único lugar que pasa `True` es el clic en «Aprobar» (`app.py:487` y `app.py:472`). Lo que se guarda lleva `"aprobada_por": "humano"` (`herramientas.py:499`) |
-| Borrar datos (sesiones, trazas, reglas, registro) | El botón «Borrar» está desactivado hasta que la persona escribe BORRAR (`app.py:390`) |
-| Encender la cámara | Solo con «Empezar sesión de estudio», y solo si la persona escribió una meta (`app.py:213` y `app.py:214`). Antes del botón, la app avisa que se enciende la cámara y qué sale del equipo (`AVISO_INICIO`). El monitor no arranca sin `--meta` (`monitor.py`, `main`) |
+| Guardar una regla (`guardar_regla`) | El bucle se detiene y devuelve la propuesta sin ejecutarla (`agente.py:332`). La función se niega a escribir sin `aprobado=True` (`herramientas.py:494`). El único lugar que pasa `True` es el clic en «Aprobar» (`app.py:524` y `app.py:509`). Lo que se guarda lleva `"aprobada_por": "humano"` (`herramientas.py:499`) |
+| Borrar datos (sesiones, trazas, reglas, registro) | El botón «Borrar» está desactivado hasta que la persona escribe BORRAR (`app.py:427`) |
+| Encender la cámara | Solo con «Empezar sesión de estudio», y solo si la persona escribió una meta (`app.py:240` y `app.py:241`). Antes del botón, la app avisa que se enciende la cámara y qué sale del equipo (`AVISO_INICIO`). El monitor no arranca sin `--meta` (`monitor.py`, `main`) |
 
 **Lo que ocurre, pero no se exige:** leer las alertas, revisar «Fuente y criterio» y la traza de cada respuesta, recalibrar con la tecla `c`, cambiar de proveedor y terminar la sesión. Son costumbres de quien usa BioFocus, no controles, y aquí no se presentan como supervisión.
 
@@ -56,7 +56,7 @@ Límites que el coach no puede saltarse: 6 vueltas del bucle (`agente.py:34`), 1
 | Sesiones (inicio, fin, meta, duración planeada, real o demo) y eventos (hora, tipo, app, categoría, duración y un detalle corto de hasta 80 caracteres) | `data/biofocus.sqlite` (`datos.py`, `ESQUEMA`). Git lo ignora | Hasta que la persona lo borre desde «Borrar mis datos». Al borrar, SQLite sobrescribe lo borrado y compacta el archivo (`datos.py:150` y `datos.py:165`). No hay vencimiento automático: es el historial que el coach consulta |
 | Estado en vivo (postura, app y categoría actuales) | Tabla `estado_monitor`, en la misma base | Igual que la sesión |
 | Preguntas al coach, respuestas, herramientas con sus argumentos, tokens y tiempos | `traces/AAAA-MM-DD.jsonl` (`trazas.py`). Git lo ignora | 30 días: al guardar una traza se borran las más viejas (`trazas.py:22` y `trazas.py:84`) |
-| Salida del monitor (inicio y fin, alertas con el nombre de la app, errores) | `data/monitor.log` | Máximo 512 KB: al llegar al tope se queda con la mitad más reciente (`app.py:43` y `app.py:114`) |
+| Salida del monitor (inicio y fin, alertas con el nombre de la app, errores) | `data/monitor.log` | Máximo 512 KB: al llegar al tope se queda con la mitad más reciente (`app.py:45` y `app.py:137`) |
 | Reglas aprobadas, con fecha y `aprobada_por` | `data/reglas.json` | Hasta que la persona las borre |
 | Resultados de la evaluación y de los ataques, con sus trazas | `producto/evals/resultados/` | En git, para siempre. Son datos sintéticos (semilla 42) |
 | En el proveedor (Groq o Gemini) | Sus servidores | **No lo controlamos.** Lo fija la política de cada proveedor y no la verificamos |
@@ -91,7 +91,7 @@ Con `OFFLINE_MODE=true`, o con `ollama` como proveedor, nada de esto sale del eq
 **Quién se entera.** La persona que lo usa. Lo ve en la ventana «BioFocus monitor» (siempre encima mientras la cámara está encendida), en «Fuente y criterio», que el código arma con lo que de verdad se consultó (`agente.py:177`), y en el aviso «quité de la respuesta…» cuando el coach intenta mostrar contenido externo (`agente.py:199`). Como desarrollador, el mismo autor revisa las trazas. No hay un canal para avisar a otra persona: es un sistema de un solo usuario.
 
 **Cómo se apaga.** De lo más inmediato a lo más amplio:
-1. La cámara: «Terminar sesión» (`app.py:195`), la tecla `q` (`monitor.py:664`) o cerrar la ventana del monitor (`monitor.py:670`). Si el monitor no responde, la app manda Ctrl+Break y cierra la sesión en la base (`app.py:158`).
+1. La cámara: «Terminar sesión» (`app.py:218`), la tecla `q` (`monitor.py:664`) o cerrar la ventana del monitor (`monitor.py:670`). Si el monitor no responde, la app manda Ctrl+Break y cierra la sesión en la base (`app.py:181`).
 2. La salida de títulos a Groq: `LLM_CLASIFICADOR_PROVIDER=ninguno` en `.env`. Las reglas fijas siguen y lo ambiguo queda sin clasificar.
 3. Toda salida a internet: `OFFLINE_MODE=true` (solo modelo local) o borrar la llave de `.env`. El coach responde que no hay proveedor, sin inventar.
 4. Todo: cerrar Streamlit con Ctrl+C. El monitor se cierra solo a los 15 s sin señales (`vivo.py:14`).

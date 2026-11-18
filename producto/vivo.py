@@ -170,6 +170,7 @@ def resumen(con: sqlite3.Connection, sesion_id: int, ahora: datetime, *, con_met
         "porcentaje_por_categoria": {c: round(100 * v / total, 1) if total else 0.0 for c, v in segundos.items()},
         "alertas_postura": sum(a["tipo"] == "postura" for a in alertas),
         "alertas_distraccion": sum(a["tipo"] == "distraccion" for a in alertas),
+        "pausas": con.execute("SELECT COUNT(*) FROM eventos WHERE sesion_id = ? AND tipo = 'pausa'", (sesion_id,)).fetchone()[0],
         "alertas": alertas,
         "tramos": tramos,
     }
@@ -192,6 +193,26 @@ def resumen_por_origen(con: sqlite3.Connection, es_demo: bool) -> dict:
     ):
         minutos[f["categoria"]] = round(f["s"] / 60, 1)
     return {"sesiones": filas["n"], "desde": filas["desde"], "hasta": filas["hasta"], "minutos": minutos}
+
+
+def totales_reales(con: sqlite3.Connection, desde: datetime) -> dict:
+    """Sesiones reales terminadas que empezaron desde `desde`: cuántas, minutos, alertas y pausas (B7)."""
+    filas = con.execute("SELECT id, inicio, fin FROM sesiones WHERE es_demo = 0 AND fin IS NOT NULL AND inicio >= ?",
+                        (desde.strftime(F),)).fetchall()
+    ids = [f["id"] for f in filas]
+    conteo = {"alerta_postura": 0, "alerta_distraccion": 0, "pausa": 0}
+    if ids:
+        marcas = ",".join("?" * len(ids))
+        for f in con.execute(f"SELECT tipo, COUNT(*) AS n FROM eventos WHERE sesion_id IN ({marcas}) "
+                             "AND tipo IN ('alerta_postura', 'alerta_distraccion', 'pausa') GROUP BY tipo", ids):
+            conteo[f["tipo"]] = f["n"]
+    return {
+        "sesiones": len(filas),
+        "minutos": round(sum((_dt(f["fin"]) - _dt(f["inicio"])).total_seconds() for f in filas) / 60),
+        "alertas_postura": conteo["alerta_postura"],
+        "alertas_distraccion": conteo["alerta_distraccion"],
+        "pausas": conteo["pausa"],
+    }
 
 
 def sesiones_reales(con: sqlite3.Connection, limite: int = 10) -> list[dict]:

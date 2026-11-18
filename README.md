@@ -79,7 +79,9 @@ Crea `data/biofocus.sqlite` con 7 días de sesiones sintéticas que terminan aye
 .venv\Scripts\python -m streamlit run producto\app.py
 ```
 
-Abre http://localhost:8501. La app solo escucha en tu equipo.
+Abre http://localhost:8501. La app solo escucha en tu equipo. También se abre con doble clic en `BioFocus.bat`, en la raíz del repositorio.
+
+La app recuerda la duración, el modo y la imagen de la última sesión (`data/preferencias.json`, sin la meta). La primera vez propone 50 min con tiempos normales.
 
 - **Empezar sesión de estudio:**
   1. Escribe la meta.
@@ -100,7 +102,7 @@ Abre http://localhost:8501. La app solo escucha en tu equipo.
 - **¿Sobre qué datos pregunto?:** encima del chat eliges «Mis sesiones reales» o «Semana de datos demo». El coach solo consulta esos datos: las dos cosas nunca se suman. «¿Cómo va mi sesión?» siempre mira la sesión real.
 - **Barra lateral:**
   - «Opciones técnicas» (plegadas): proveedor activo, que se cambia en vivo, e interruptores de prueba;
-  - por separado, las **sesiones reales** y la **semana de datos demo**;
+  - por separado, las **sesiones reales** (con los totales de hoy y de los últimos 7 días: sesiones, minutos, alertas y pausas) y la **semana de datos demo**;
   - **Borrar mis datos:** sesiones reales, semana demo, trazas del coach, reglas aprobadas o el registro del monitor. Hay que escribir BORRAR, y no se puede deshacer.
 
 ## Sesión en vivo desde la terminal
@@ -132,7 +134,7 @@ Si lanzar el monitor desde la app da problemas, inícialo desde la terminal; la 
 `--video` es el plan B sin cámara: lee el video una vez, a su ritmo, y al terminar cierra la sesión; la ventana activa se sigue leyendo en vivo. La sesión queda como real (`es_demo = 0`) aunque uses `--modo-demo`. Para probar sin ventana ni sonido: `--sin-ventana`. Para ver cada segundo el número de postura, la base y el estado: `--detalle`.
 
 ## Prueba de 3 minutos (modo demo)
-En la app: meta «Repasar integración por partes», duración 3, modo demo encendido e imagen «Cámara». Presiona «Empezar sesión de estudio». Pon la ventana «BioFocus monitor» en una esquina, donde no tape lo que vas a mostrar.
+En la app: meta «Repasar integración por partes», duración 3, modo demo encendido e imagen «Cámara» (la app los recuerda para la próxima vez). Presiona «Empezar sesión de estudio». Pon la ventana «BioFocus monitor» en una esquina, donde no tape lo que vas a mostrar.
 
 | Minuto | Qué hacer | Qué debe pasar |
 |---|---|---|

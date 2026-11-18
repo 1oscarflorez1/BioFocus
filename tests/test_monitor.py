@@ -597,6 +597,21 @@ class TestBaseEnVivo(unittest.TestCase):
             self.assertEqual(monitor.main(["--meta=-repaso", "--duracion", "3"]), 0)
         self.assertEqual(correr.call_args.args[0].meta, "-repaso")
 
+    def test_totales_de_hoy_y_7_dias_solo_reales(self):
+        with closing(datos.conectar(self.bd)) as con:
+            hoy = datos.crear_sesion(con, "2026-11-18 08:00:00", "2026-11-18 08:50:00", "m", 50)
+            datos.agregar_evento(con, hoy, "2026-11-18 08:20:00", "alerta_postura", detalle="x")
+            datos.agregar_evento(con, hoy, "2026-11-18 08:30:00", "pausa", duracion_s=90, detalle="fuera de cuadro")
+            datos.crear_sesion(con, "2026-11-14 10:00:00", "2026-11-14 10:25:00", "m", 25)
+            datos.crear_sesion(con, "2026-11-18 09:00:00", "2026-11-18 10:00:00", "m", 60, es_demo=True)
+            datos.crear_sesion(con, "2026-11-18 11:00:00", None, "m", 60)  # en curso: no cuenta todavía
+            con.commit()
+            t_hoy = vivo.totales_reales(con, datetime(2026, 11, 18))
+            t_semana = vivo.totales_reales(con, datetime(2026, 11, 12))
+            self.assertEqual(vivo.resumen(con, hoy, datetime(2026, 11, 18, 12))["pausas"], 1)
+        self.assertEqual(t_hoy, {"sesiones": 1, "minutos": 50, "alertas_postura": 1, "alertas_distraccion": 0, "pausas": 1})
+        self.assertEqual((t_semana["sesiones"], t_semana["minutos"]), (2, 75))
+
     def test_reales_y_demo_por_separado(self):
         with closing(datos.conectar(self.bd)) as con:
             real = datos.crear_sesion(con, "2026-10-31 10:00:00", "2026-10-31 10:10:00", "m", 10)
