@@ -55,6 +55,9 @@ def medir(ruta: Path) -> dict:
     opciones = vision.PoseLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=str(MODELO)), running_mode=vision.RunningMode.VIDEO, num_poses=1
     )
+    # Primera pasada: el lado que la cámara ve mejor en todo el video. Antes se elegía cuadro por cuadro y el
+    # lado cambiaba hasta 34 veces en un video, mezclando oreja izquierda y derecha (diagnóstico del 2026-11-20).
+    puntos: list[tuple[float, list, int, int]] = []
     cuello: dict[int, list[float]] = {}
     tronco: dict[int, list[float]] = {}
     vistos = cuadros = 0
@@ -73,16 +76,18 @@ def medir(ruta: Path) -> dict:
             r = detector.detect_for_video(imagen, int(t * 1000))
             if not r.pose_landmarks:
                 continue
-            p = r.pose_landmarks[0]
-            oreja, hombro, cadera = max(lados.values(), key=lambda idx: sum(p[i].visibility for i in idx))
-            if min(p[oreja].visibility, p[hombro].visibility) < VISIBILIDAD_MIN:
-                continue
-            vistos += 1
-            segundo = int(t)
-            cuello.setdefault(segundo, []).append(angulo_vertical(p[hombro], p[oreja], ancho, alto))
-            if p[cadera].visibility >= VISIBILIDAD_MIN:
-                tronco.setdefault(segundo, []).append(angulo_vertical(p[cadera], p[hombro], ancho, alto))
+            puntos.append((t, r.pose_landmarks[0], ancho, alto))
     video.release()
+    lado = max(lados, key=lambda k: sum(p[i].visibility for _, p, _, _ in puntos for i in lados[k])) if puntos else "derecho"
+    oreja, hombro, cadera = lados[lado]
+    for t, p, ancho, alto in puntos:
+        if min(p[oreja].visibility, p[hombro].visibility) < VISIBILIDAD_MIN:
+            continue
+        vistos += 1
+        segundo = int(t)
+        cuello.setdefault(segundo, []).append(angulo_vertical(p[hombro], p[oreja], ancho, alto))
+        if p[cadera].visibility >= VISIBILIDAD_MIN:
+            tronco.setdefault(segundo, []).append(angulo_vertical(p[cadera], p[hombro], ancho, alto))
     proceso_s = time.perf_counter() - t0
 
     def resumen(por_segundo: dict[int, list[float]]) -> dict | None:
@@ -92,7 +97,7 @@ def medir(ruta: Path) -> dict:
         return {"mediana": statistics.median(medianas), "ruido": max(medianas) - min(medianas), "segundos": len(medianas)}
 
     return {
-        "video": ruta.name, "cuadros": cuadros, "con_pose": vistos, "fps_video": fps,
+        "video": ruta.name, "lado": lado, "cuadros": cuadros, "con_pose": vistos, "fps_video": fps,
         "fps_proceso": cuadros / proceso_s if proceso_s else 0.0,
         "cuello": resumen(cuello), "tronco": resumen(tronco),
     }
@@ -114,11 +119,11 @@ def main() -> int:
         raise SystemExit("Faltan videos: " + ", ".join(faltan) + ". Ver docs/decisiones/experimento-02.md.")
 
     medidas = {nombre: medir(ruta) for nombre, ruta in videos.items()}
-    print(f"{'video':<11} {'cuadros':>7} {'con pose':>9} {'fps proc.':>9}   {'cuello (°)':>18}   {'tronco (°)':>18}")
+    print(f"{'video':<11} {'lado':<9} {'cuadros':>7} {'con pose':>9} {'fps proc.':>9}   {'cuello (°)':>18}   {'tronco (°)':>18}")
     for nombre, m in medidas.items():
         def txt(r):
             return f"{r['mediana']:6.1f} ± {r['ruido']:4.1f} ({r['segundos']} s)" if r else "  sin datos"
-        print(f"{nombre:<11} {m['cuadros']:>7} {m['con_pose']:>9} {m['fps_proceso']:>9.1f}   {txt(m['cuello']):>18}   {txt(m['tronco']):>18}")
+        print(f"{nombre:<11} {m['lado']:<9} {m['cuadros']:>7} {m['con_pose']:>9} {m['fps_proceso']:>9.1f}   {txt(m['cuello']):>18}   {txt(m['tronco']):>18}")
 
     print("\nCriterio: diferencia frente a «derecho» de al menos 3 veces el ruido (el mayor de los dos videos).")
     for senal in ("cuello", "tronco"):

@@ -22,7 +22,7 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
 | B5 | **No se hace**: asumido en `docs/respuesta_auditoria.md`, hallazgo 13 | — |
 | E1 y E2 | Hecho: `docs/decisiones/semana14.md` | `a1a0366` (medido) y `eb9c745` |
 | F1 a F5 | Hecho. F2 es la plantilla: falta la prueba con la persona ajena | `6b1166e`, `0e4656e` y `9c6b02a` |
-| G1 | Preparado; faltan los videos laterales | `6b1166e` |
+| G1 | Hecho el 2026-11-20: no cumple el criterio (0,9 a 1,0 veces el ruido en el cuello) | este commit |
 | G2 | Renegociado en `docs/SPEC.md` | — |
 | H1 | Hecho: qwen2.5:3b para el clasificador y el coach | `e1546ae` |
 | H2 y H3 | Hecho: 34/36 en local (`docs/decisiones/semana14.md`); el plan B es el modo local | `2026-11-18_0426.json` |
