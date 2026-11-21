@@ -110,9 +110,49 @@ def pedir_recalibrar(con: sqlite3.Connection, sesion_id: int) -> None:
     con.commit()
 
 
-def ultima_sesion_real(con: sqlite3.Connection) -> int | None:
-    fila = con.execute("SELECT id FROM sesiones WHERE es_demo = 0 ORDER BY inicio DESC, id DESC LIMIT 1").fetchone()
+def pedir_sin_internet(con: sqlite3.Connection, sesion_id: int, activo: bool) -> None:
+    """El interruptor «Modo sin internet» de la app: el monitor lo lee en su próximo latido, en menos de 1 s (J6)."""
+    con.execute("UPDATE estado_monitor SET sin_internet = ? WHERE sesion_id = ?", (1 if activo else 0, sesion_id))
+    con.commit()
+
+
+def ultima_sesion_real(con: sqlite3.Connection, terminada: bool = False) -> int | None:
+    """La sesión real más reciente; con terminada=True, la más reciente que ya terminó (pestaña «Última sesión real»)."""
+    filtro = " AND fin IS NOT NULL" if terminada else ""
+    fila = con.execute(f"SELECT id FROM sesiones WHERE es_demo = 0{filtro} ORDER BY inicio DESC, id DESC LIMIT 1").fetchone()
     return fila["id"] if fila else None
+
+
+MAX_METAS_RECIENTES = 5  # las que caben como botones en una fila sin tapar el formulario
+
+
+def metas_recientes(con: sqlite3.Connection, n: int = MAX_METAS_RECIENTES) -> list[str]:
+    """Las últimas metas distintas de sesiones reales, de la más reciente a la más vieja (tarea J3).
+    Las metas se quedan en el equipo: solo las ve la persona en su propio formulario."""
+    return [f["meta"] for f in con.execute(
+        "SELECT meta, MAX(inicio) AS ultima FROM sesiones WHERE es_demo = 0 GROUP BY meta ORDER BY ultima DESC LIMIT ?",
+        (n,))]
+
+
+def gestos(con: sqlite3.Connection, sesion_ids: list[int]) -> dict[int, dict]:
+    """Por sesión: veces y segundos con la mano en la cara y mirando fuera, y alertas de mirada (tarea J5)."""
+    vacio = lambda: {"mano_cara_n": 0, "mano_cara_s": 0, "mirada_fuera_n": 0, "mirada_fuera_s": 0, "alertas_mirada": 0}  # noqa: E731
+    r = {i: vacio() for i in sesion_ids}
+    if not sesion_ids:
+        return r
+    marcas = ",".join("?" * len(sesion_ids))
+    try:
+        filas = con.execute(f"SELECT sesion_id, tipo, COUNT(*) AS n, COALESCE(SUM(duracion_s), 0) AS s FROM gestos "
+                            f"WHERE sesion_id IN ({marcas}) GROUP BY sesion_id, tipo", sesion_ids).fetchall()
+    except sqlite3.OperationalError:  # base de antes de la tarea J5, abierta en solo lectura
+        return r
+    for f in filas:
+        if f["tipo"] == "alerta_mirada":
+            r[f["sesion_id"]]["alertas_mirada"] = f["n"]
+        else:
+            r[f["sesion_id"]][f"{f['tipo']}_n"] = f["n"]
+            r[f["sesion_id"]][f"{f['tipo']}_s"] = f["s"]
+    return r
 
 
 def resumen(con: sqlite3.Connection, sesion_id: int, ahora: datetime, *, con_meta: bool = False) -> dict:
@@ -179,6 +219,7 @@ def resumen(con: sqlite3.Connection, sesion_id: int, ahora: datetime, *, con_met
         "pausas": con.execute("SELECT COUNT(*) FROM eventos WHERE sesion_id = ? AND tipo = 'pausa'", (sesion_id,)).fetchone()[0],
         "alertas": alertas,
         "tramos": tramos,
+        "gestos": gestos(con, [sesion_id])[sesion_id],
     }
     if con_meta:
         r["meta"] = s["meta"]
@@ -253,6 +294,9 @@ def registros(con: sqlite3.Connection, es_demo: bool, desde: date, hasta: date) 
         }
         for f in filas
     ]
+    por_sesion = gestos(con, [s["id"] for s in sesiones])
+    for s in sesiones:
+        s.update(por_sesion[s["id"]])
     minutos = {c: 0.0 for c in datos.CATEGORIAS}
     for f in con.execute(
         "SELECT e.categoria, COALESCE(SUM(e.duracion_s), 0) AS s FROM eventos e JOIN sesiones s ON s.id = e.sesion_id "

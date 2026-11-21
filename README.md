@@ -99,7 +99,7 @@ La app tiene cuatro pestañas arriba:
 - **Sesión:**
   1. Escribe la meta.
   2. Elige la duración, la imagen (la cámara, o un video de `grabaciones/` como plan B), si quieres ver la imagen de la cámara y el modo demo (tiempos cortos).
-  3. Presiona «Empezar sesión de estudio». La app lanza el monitor como proceso aparte. Con «Ver la imagen de la cámara» apagado, la cámara trabaja escondida.
+  3. Presiona «Empezar sesión de estudio». La app lanza el monitor como proceso aparte. «Imagen de la cámara» elige cuándo se ve su ventana: solo al calibrar (por defecto), toda la sesión o nunca. Los avisos salen igual.
   - **Avisos:** cada alerta de postura, de distracción y cada recordatorio de pausa sale en una ventanita encima de todo, abajo a la derecha, con un sonido. No te quita el teclado y se cierra sola en 8 s (o con un clic). Al cumplirse el tiempo planeado te avisa que la cámara sigue encendida, y lo repite cada 10 min.
   - **Terminar sesión** y **Recalibrar postura:** botones arriba del panel. Para recalibrar, siéntate derecho unos 5 s.
   - **Panel en vivo:** se actualiza cada 2 s. Muestra la meta y el tiempo, la ventana actual y su categoría, la postura frente a tu línea base, la última alerta destacada, los minutos por categoría y una línea de tiempo con las ventanas y las alertas.
@@ -147,7 +147,7 @@ Si lanzar el monitor desde la app da problemas, inícialo desde la terminal; la 
 `--video` es el plan B sin cámara: lee el video una vez, a su ritmo, y al terminar cierra la sesión; la ventana activa se sigue leyendo en vivo. La sesión queda como real (`es_demo = 0`) aunque uses `--modo-demo`. Para probar sin ventana ni sonido: `--sin-ventana`. Para ver cada segundo el número de postura, la base y el estado: `--detalle`.
 
 ## Prueba de 3 minutos (modo demo)
-En la app: meta «Repasar integración por partes», duración 3, modo demo encendido e imagen «Cámara» (la app los recuerda para la próxima vez). Enciende «Ver la imagen de la cámara» si quieres mostrar el esqueleto, y presiona «Empezar sesión de estudio». Pon la ventana «BioFocus monitor» en una esquina, donde no tape lo que vas a mostrar. Los avisos salen igual abajo a la derecha.
+En la app: meta «Repasar integración por partes», duración 3, modo demo encendido e imagen «Cámara» (la app los recuerda para la próxima vez). Pon «Imagen de la cámara» en «Toda la sesión» si quieres mostrar el esqueleto, y presiona «Empezar sesión de estudio». Pon la ventana «BioFocus monitor» en una esquina, donde no tape lo que vas a mostrar. Los avisos salen igual abajo a la derecha.
 
 | Minuto | Qué hacer | Qué debe pasar |
 |---|---|---|

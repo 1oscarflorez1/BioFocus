@@ -7,7 +7,7 @@ Entrega: 2026-11-20. Presentación en vivo: 2026-11-21. Lo que se cambie despué
 ## Entregables
 | Entregable | Formato | Dónde | Qué mirar primero |
 |---|---|---|---|
-| El producto completo, corriendo | Aplicación | `producto/`; cómo se corre en `README.md`, sección «Usar la app»; doble clic en `BioFocus.bat` | La app en cuatro pestañas (Sesión, Coach, Mis registros y Ajustes), el monitor con su aviso emergente y 104 pruebas sin red: `.venv\Scripts\python -m unittest discover -s tests` |
+| El producto completo, corriendo | Aplicación | `producto/`; cómo se corre en `README.md`, sección «Usar la app»; doble clic en `BioFocus.bat` | La app en cinco pestañas (Sesión, Última sesión real, Coach, Mis registros y Ajustes), el monitor con su aviso emergente y 121 pruebas sin red: `.venv\Scripts\python -m unittest discover -s tests` |
 | Modelo de amenazas y hardening aplicado | `docs/` | `docs/seguridad.md`, secciones 1, 2 y 4 | Las cinco preguntas del modelo de amenazas, la tríada del coach y del clasificador, y la tabla de antes y después de cinco controles |
 | Prueba de inyección contra el propio agente, documentada | `docs/` | `docs/seguridad.md`, sección 3; `producto/evals/ataques.py`; resultados en `producto/evals/resultados/ataques-*.json` | El ataque que funcionó (`imagen_markdown`, 3/3, traza `6ff67bd00129`), el arreglo en el código y el mismo ataque después, también sin la regla del prompt (traza `2c2499dddcaa`) |
 | Ficha de gobernanza del producto | `docs/` | `docs/gobernanza.md` | Qué decide solo, qué exige a un humano (con la línea de código), qué queda registrado y por cuánto tiempo, y qué se hace ante un incidente |
@@ -24,7 +24,7 @@ Entrega: 2026-11-20. Presentación en vivo: 2026-11-21. Lo que se cambie despué
 | **Seguridad:** permisos reducidos | | Base en solo lectura para el coach, consultas fijas sin SQL del modelo y nombres de app con alfabeto cerrado (`docs/seguridad.md`, sección 4). Permisos de Claude Code en `.claude/settings.json` y `docs/decisiones/permisos.md` |
 | **Seguridad:** secretos fuera del código | | `.env` en `.gitignore` y `.env.example` sin llaves. Las llaves expuestas en octubre se cambiaron el 2026-11-13, y se revisó que no estén en git, `traces/`, `data/` ni en los resultados (`docs/seguridad.md`, fila «Secretos») |
 | **Seguridad:** prueba de inyección con su resultado | | `docs/seguridad.md`, sección 3, con los ataques que fallaron completos y el del clasificador que se asume |
-| **Gobernanza** | 20 | `docs/gobernanza.md`. La supervisión que el código exige: `agente.py:332`, `herramientas.py:494`, `app.py:715` (Aprobar) y `app.py:587` (Borrar) |
+| **Gobernanza** | 20 | `docs/gobernanza.md`. La supervisión que el código exige: `agente.py:332`, `herramientas.py:494`, `app.py:873` (Aprobar) y `app.py:685` (Borrar) |
 | **Medición final** | 15 | `docs/decisiones/semana14.md`: 36/36 y 27/27 iguales; costo +10 % y mediana +139 ms, por la séptima herramienta y dos reglas del prompt. El bloque I no tocó el coach, así que las cifras valen para el código entregado |
 | **Sustentación** | 20 | `docs/sustentacion.md`: respuestas con su evidencia, incluidas las incómodas, y la explicación de cada función clave |
 

@@ -26,6 +26,10 @@ TIPOS_EVENTO = (
 )
 CATEGORIAS = ("sirve", "no_sirve", "neutro", "sin_clasificar")
 MAX_DETALLE = 80  # textos cortos y fijos del producto, nunca un título
+# Gestos que ve la cámara además de la postura (tarea J5). Van en su propia tabla y no en `eventos`, por dos
+# razones: la tabla `eventos` de una base ya creada tiene su lista de tipos fija (un CHECK que SQLite no deja
+# cambiar sin rehacerla), y así el coach, que lee `eventos`, sigue igual que cuando se midió en E2.
+TIPOS_GESTO = ("mano_cara", "mirada_fuera", "alerta_mirada")
 
 
 def _lista_sql(valores: tuple[str, ...]) -> str:
@@ -66,12 +70,23 @@ CREATE TABLE IF NOT EXISTS estado_monitor (
     categoria TEXT CHECK (categoria IS NULL OR categoria IN ({_lista_sql(CATEGORIAS)})),
     ventana_desde TEXT,                    -- desde cuándo está en esa ventana
     detener INTEGER NOT NULL DEFAULT 0 CHECK (detener IN (0, 1)),  -- la app pide terminar la sesión
-    recalibrar INTEGER NOT NULL DEFAULT 0 CHECK (recalibrar IN (0, 1))  -- la app pide recalibrar la postura
+    recalibrar INTEGER NOT NULL DEFAULT 0 CHECK (recalibrar IN (0, 1)),  -- la app pide recalibrar la postura
+    sin_internet INTEGER NOT NULL DEFAULT 0 CHECK (sin_internet IN (0, 1))  -- «Modo sin internet» de la app
 );
+-- Mano en la cara y mirada fuera de la pantalla: cuándo empezó cada episodio y cuánto duró. Sin imágenes.
+CREATE TABLE IF NOT EXISTS gestos (
+    id INTEGER PRIMARY KEY,
+    sesion_id INTEGER NOT NULL REFERENCES sesiones(id) ON DELETE CASCADE,
+    ts TEXT NOT NULL,                      -- hora local 'AAAA-MM-DD HH:MM:SS' en que empezó
+    tipo TEXT NOT NULL CHECK (tipo IN ({_lista_sql(TIPOS_GESTO)})),
+    duracion_s INTEGER NOT NULL CHECK (duracion_s >= 0)
+);
+CREATE INDEX IF NOT EXISTS idx_gestos_sesion ON gestos (sesion_id, tipo);
 """
 # Columnas que se sumaron después de crear la tabla: una base vieja las recibe al conectar.
 COLUMNAS_NUEVAS = {
-    "estado_monitor": {"recalibrar": "INTEGER NOT NULL DEFAULT 0 CHECK (recalibrar IN (0, 1))"},
+    "estado_monitor": {"recalibrar": "INTEGER NOT NULL DEFAULT 0 CHECK (recalibrar IN (0, 1))",
+                       "sin_internet": "INTEGER NOT NULL DEFAULT 0 CHECK (sin_internet IN (0, 1))"},
 }
 
 
@@ -156,9 +171,18 @@ def agregar_evento(
     return int(cur.lastrowid)
 
 
+def agregar_gesto(con: sqlite3.Connection, sesion_id: int, ts: str, tipo: str, duracion_s: int) -> int:
+    if tipo not in TIPOS_GESTO:
+        raise ValueError(f"tipo de gesto desconocido: {tipo!r}")
+    cur = con.execute("INSERT INTO gestos (sesion_id, ts, tipo, duracion_s) VALUES (?, ?, ?, ?)",
+                      (sesion_id, ts, tipo, max(0, int(duracion_s))))
+    return int(cur.lastrowid)
+
+
 def borrar_demo(con: sqlite3.Connection) -> int:
     """Borra solo las sesiones demo y sus eventos. Devuelve cuántas sesiones borró."""
     n = con.execute("SELECT COUNT(*) FROM sesiones WHERE es_demo = 1").fetchone()[0]
+    con.execute("DELETE FROM gestos WHERE sesion_id IN (SELECT id FROM sesiones WHERE es_demo = 1)")
     con.execute("DELETE FROM eventos WHERE sesion_id IN (SELECT id FROM sesiones WHERE es_demo = 1)")
     con.execute("DELETE FROM sesiones WHERE es_demo = 1")
     return int(n)
@@ -174,6 +198,7 @@ def borrar_reales(con: sqlite3.Connection) -> int:
     filtro = "SELECT id FROM sesiones WHERE es_demo = 0 AND fin IS NOT NULL"
     n = con.execute(f"SELECT COUNT(*) FROM ({filtro})").fetchone()[0]
     con.execute(f"DELETE FROM eventos WHERE sesion_id IN ({filtro})")
+    con.execute(f"DELETE FROM gestos WHERE sesion_id IN ({filtro})")
     con.execute(f"DELETE FROM estado_monitor WHERE sesion_id IN ({filtro})")
     con.execute("DELETE FROM sesiones WHERE es_demo = 0 AND fin IS NOT NULL")
     return int(n)

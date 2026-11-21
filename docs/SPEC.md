@@ -31,9 +31,9 @@ Los de la propuesta inicial, con su estado al 2026-11-17:
 | Autoconciencia con alertas en vivo | Cumplido | Aviso emergente (`producto/aviso.py`), pestaña «Sesión» de la app y, si se elige, la ventana «BioFocus monitor» |
 | Informes y dashboards posteriores, diarios y semanales | Cumplido: pestaña «Mis registros» con filtros por origen y fechas, cifras, minutos por categoría, alertas por día, la lista de sesiones y la línea de tiempo de cada una (bloque I); panel de la sesión; coach con preguntas por fechas | `app.py`, `panel_registros`; `vivo.py`, `registros`; `herramientas.py` |
 | Recomendar pausas activas y cómo hacerlas | Cumplido con catálogo fijo y conservador. El recordatorio por tiempo es la tarea B4 | `catalogo_pausas.json`; `pausas_recomendadas` |
-| Ver si la persona mira el celular u otro lado | Parcial: mirar el celular baja el número de postura (experimento con `distraido.mp4`), pero no hay detector propio | `m2-decisiones.md`, prueba con los tres videos |
+| Ver si la persona mira el celular u otro lado | Mirar a un lado: cumplido después de la entrega (bloque J, 2026-11-21), con el giro de la cabeza frente a la calibración, registro y alerta configurable. Mirar el celular sigue saliendo solo por el número de postura | `monitor.py`, clase `Gestos`; `m3-decisiones.md`, bloque J |
 | Cámara lateral del celular para más datos | Renegociado: el experimento 02 no cumplió el criterio y no se integra | Sección 7; `docs/decisiones/experimento-02.md` |
-| Hábitos: tocarse la cara, bostezos, micro-sueño, tics, estrés | Renegociado | Sección 7 |
+| Hábitos: tocarse la cara, bostezos, micro-sueño, tics, estrés | Tocarse la cara: se registra desde el bloque J (cuántas veces y cuánto tiempo), con un umbral que falta validar con un video. Lo demás, renegociado | `monitor.py`, clase `Gestos`; sección 7 |
 | Desorden del escritorio, ruido ambiental, ritmo de tecleo | Renegociado | Sección 7 |
 | Cuidar la privacidad: nada de imágenes, títulos privados que no salen | Cumplido y medido | `docs/seguridad.md`, `docs/gobernanza.md` |
 
@@ -126,6 +126,6 @@ Registro vivo de decisiones:
 | Ritmo de tecleo o de lectura | No se hace | Necesita un gancho global de teclado: es la capacidad de un keylogger y contradice los permisos mínimos |
 | Ruido ambiental | No se hace | Abre el micrófono: superficie nueva de privacidad, sin umbrales probados |
 | Objetos o desorden del escritorio | No se hace | La cámara frontal ve a la persona, no el escritorio; pide otro modelo y otra cámara |
-| Micro-sueño, bostezos, parpadeo, mano en la cara | No se hace | Pide Face Landmarker u otro detector, el doble de proceso y umbrales sin validar en el tiempo que quedaba |
+| Micro-sueño, bostezos, parpadeo | No se hace | Pide Face Landmarker u otro detector, el doble de proceso y umbrales sin validar en el tiempo que quedaba |
 | Estrés, tics, hábitos nerviosos | No se hace | Con estos sensores no hay señal válida: sería inventar un diagnóstico |
-| Mirada fuera de la pantalla | No hay detector propio | Mirar a un lado sube el número de postura y mirar el celular lo baja (`m2-decisiones.md`). Un detector propio quedó «si alcanza» desde el Momento 1 y no alcanzó |
+| Mirada fuera de la pantalla y mano en la cara | Se hizo después de la entrega del 2026-11-20 (bloque J), con los mismos puntos de pose y sin otro modelo | Antes de la entrega quedó «si alcanza» y no alcanzó. En el bloque J, mirar a un lado se mide como el giro de la cabeza frente a la calibración (`distraido.mp4` marca sus dos tramos y `derecho.mp4`, nada). La mano en la cara no tiene todavía un video para medir aciertos: su umbral es el más bajo que no marca nada en los tres videos (`m3-decisiones.md`) |

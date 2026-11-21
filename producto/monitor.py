@@ -18,14 +18,19 @@ desde la app («Recalibrar postura» y «Terminar sesión»). En todos los casos
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
+import io
+import math
 import os
 import queue
 import signal
 import statistics
+import struct
 import sys
 import threading
 import time
+import wave
 from collections import deque
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -295,21 +300,205 @@ class Distraccion:
         return True
 
 
+# ---------------------------------------------------------------- mano en la cara y mirada fuera (tarea J5)
+# Salen de los mismos 33 puntos de MediaPipe Pose, sin otro modelo. Los índices van como números, y no con
+# vision.PoseLandmark, para que las pruebas no necesiten MediaPipe.
+NARIZ, OJO_IZQ, OJO_DER, OREJA_IZQ, OREJA_DER, BOCA_IZQ, BOCA_DER = 0, 2, 5, 7, 8, 9, 10
+HOMBRO_IZQ, HOMBRO_DER = 11, 12
+MANOS = ((15, 17, 19, 21), (16, 18, 20, 22))  # muñeca, meñique, índice y pulgar de cada mano
+PUNTOS_CARA = (NARIZ, OJO_IZQ, OJO_DER, OREJA_IZQ, OREJA_DER, BOCA_IZQ, BOCA_DER)
+VISIBILIDAD_MANO_MIN = 0.5  # con la mano fuera de cuadro MediaPipe igual la ubica, pero con visibilidad de 0,1
+MANO_CARA_UMBRAL = 0.15  # distancia de la mano a la cara, en anchos de hombros. En los videos sin tocarse la cara,
+# lo más cerca que pasó una mano fue 0,17 (derecho.mp4); sostener el celular frente a la cara dio 0,14 a 0,23.
+# No hay todavía un video tocándose la cara: el umbral es el más bajo que no marca nada en los tres videos.
+MANO_CARA_MIN_S = 1.0  # menos de 1 s es la mano que pasa frente a la cara
+GIRO_UMBRAL = 0.15  # cuánto se corre la nariz del centro de las orejas (en distancias entre orejas) frente a la
+# línea base. Derecho, el 90 % de los cuadros quedó a ±0,07 de su base; mirar a un lado (distraido.mp4) dio +0,20 a
+# +0,38. La línea base sale de la calibración, así que una cámara corrida a un lado no cuenta como mirar fuera.
+MIRADA_MIN_S = 2.0  # un vistazo de menos de 2 s a la libreta o al teclado no cuenta
+TOLERANCIA_GESTO_S = 0.5  # un cuadro suelto sin el gesto no parte un episodio en dos
+MIRADA_DEMO_S = 5  # en modo demo, aviso a los 5 s mirando fuera, como la postura
+MIRADA_MIN_ALERTA_S, MIRADA_MAX_ALERTA_S = 5, 120  # «Ajustes»: menos de 5 s avisaría por mirar la libreta; más de
+# 2 min ya no avisa «en el momento»
+MIRADA_ALERTA_S = 20  # por defecto, igual que la postura: deja leer un apunte en papel sin que salga el aviso
+MOSTRAR_TRAS_CALIBRAR_S = 2.0  # con la cámara «solo al calibrar», la ventana queda 2 s más para ver que terminó
+
+
+def distancia_mano_cara(puntos, ancho: int, alto: int) -> float | None:
+    """La menor distancia entre un punto visible de una mano y uno de la cara, en anchos de hombros.
+
+    None si no se ve ninguna mano o los hombros no alcanzan para medir.
+    """
+    ancho_hombros = abs(puntos[HOMBRO_IZQ].x - puntos[HOMBRO_DER].x) * ancho
+    if ancho_hombros < 1:
+        return None
+    mejor = None
+    for mano in MANOS:
+        for i in mano:
+            p = puntos[i]
+            if p.visibility < VISIBILIDAD_MANO_MIN:
+                continue
+            for j in PUNTOS_CARA:
+                c = puntos[j]
+                d = math.hypot((p.x - c.x) * ancho, (p.y - c.y) * alto) / ancho_hombros
+                mejor = d if mejor is None else min(mejor, d)
+    return mejor
+
+
+def giro_cabeza(puntos) -> float | None:
+    """Dónde queda la nariz entre las dos orejas: cerca de 0 de frente, y crece al girar la cabeza. None si no se ve."""
+    nariz, izq, der = puntos[NARIZ], puntos[OREJA_IZQ], puntos[OREJA_DER]
+    if nariz.visibility < VISIBILIDAD_MIN:
+        return None
+    separacion = abs(izq.x - der.x)
+    if separacion < 1e-3:
+        return None
+    return (nariz.x - (izq.x + der.x) / 2) / separacion
+
+
+class Episodio:
+    """Un gesto que dura: empieza cuando se cumple la condición y termina cuando deja de cumplirse más de
+    TOLERANCIA_GESTO_S. Cuenta si duró al menos min_s."""
+
+    def __init__(self, min_s: float):
+        self.min_s = min_s
+        self.desde: float | None = None
+        self.ultima: float | None = None
+
+    def actualizar(self, t: float, cumple: bool) -> tuple[float, float] | None:
+        """Devuelve (inicio, duración) cuando termina un episodio que contó."""
+        if cumple:
+            if self.desde is None:
+                self.desde = t
+            self.ultima = t
+            return None
+        if self.desde is not None and t - self.ultima > TOLERANCIA_GESTO_S:
+            return self.cerrar()
+        return None
+
+    def dura(self) -> float:
+        return 0.0 if self.desde is None else self.ultima - self.desde
+
+    def cerrar(self) -> tuple[float, float] | None:
+        desde, duracion = self.desde, self.dura()
+        self.desde = self.ultima = None
+        return (desde, duracion) if desde is not None and duracion >= self.min_s else None
+
+
+class Gestos:
+    """Mano en la cara y mirada fuera de la pantalla, con la alerta de mirada (tarea J5).
+
+    - Mano en la cara: solo se registra (cuántas veces y cuánto tiempo); no avisa.
+    - Mirada fuera: la línea base del giro sale de la calibración de la postura. Se registra cada episodio de al menos
+      MIRADA_MIN_S y, si la persona lo eligió, avisa tras alerta_s seguidos, una vez por episodio y con cooldown.
+    """
+
+    def __init__(self, alerta_s: float, avisar: bool, cooldown_s: float):
+        self.mano = Episodio(MANO_CARA_MIN_S)
+        self.mirada = Episodio(MIRADA_MIN_S)
+        self.alerta_s, self.avisar, self.cooldown_s = alerta_s, avisar, cooldown_s
+        self.base_giro: float | None = None
+        self.giro: float | None = None  # giro actual frente a la base, para --detalle
+        self.distancia: float | None = None  # distancia mano–cara actual, para --detalle
+        self._calibracion: list[float] = []
+        self.ultima_alerta = float("-inf")
+        self.armada = True
+
+    def recalibrar(self) -> None:
+        self.base_giro, self._calibracion = None, []
+
+    def actualizar(self, t: float, puntos, ancho: int, alto: int, calibrando: bool) -> tuple[list[tuple[str, float, float]], bool]:
+        """Devuelve (episodios que terminaron, como (tipo, inicio, duración); si toca la alerta de mirada)."""
+        terminados = []
+        self.distancia = distancia_mano_cara(puntos, ancho, alto) if puntos else None
+        fin = self.mano.actualizar(t, self.distancia is not None and self.distancia < MANO_CARA_UMBRAL)
+        if fin:
+            terminados.append(("mano_cara", *fin))
+
+        giro = giro_cabeza(puntos) if puntos else None
+        if calibrando:
+            if giro is not None:
+                self._calibracion.append(giro)
+            self.giro = None
+        else:
+            if self.base_giro is None and self._calibracion:
+                self.base_giro = statistics.median(self._calibracion)
+            self.giro = None if giro is None or self.base_giro is None else giro - self.base_giro
+        fin = self.mirada.actualizar(t, self.giro is not None and abs(self.giro) > GIRO_UMBRAL)
+        if fin:
+            terminados.append(("mirada_fuera", *fin))
+        if self.mirada.desde is None:
+            self.armada = True
+
+        alerta = (self.avisar and self.armada and self.mirada.dura() >= self.alerta_s
+                  and t - self.ultima_alerta >= self.cooldown_s)
+        if alerta:
+            self.armada, self.ultima_alerta = False, t
+        return terminados, alerta
+
+    def cerrar(self) -> list[tuple[str, float, float]]:
+        """Al terminar la sesión: los episodios en curso también cuentan si duraron lo suficiente."""
+        return [(tipo, *fin) for tipo, ep in (("mano_cara", self.mano), ("mirada_fuera", self.mirada))
+                if (fin := ep.cerrar())]
+
+
 # ---------------------------------------------------------------- avisos
 
 
+TONOS = {  # (frecuencia en Hz, milisegundos): cada tipo de aviso suena distinto
+    "postura": [(660, 160), (520, 220)], "distraccion": [(880, 140), (1175, 220)],
+    "pausa": [(523, 150), (659, 150), (784, 220)], "tiempo": [(784, 180), (523, 260)],
+    "mirada": [(988, 140), (740, 220)],
+}
+MUESTREO_HZ = 22050  # de sobra para tonos de menos de 1,2 kHz, y el sonido entero pesa unos 25 KB
+VOLUMEN = 0.6  # fracción del máximo: se oye sin sobresaltar; el volumen final lo pone Windows
+RAMPA_MS = 8  # subida y bajada suaves en cada tono: sin ellas suena un clic al empezar y al terminar
+SILENCIO_ENTRE_TONOS_MS = 30
+
+
+@functools.lru_cache(maxsize=None)
+def sonido_wav(tipo: str) -> bytes:
+    """Los tonos del aviso como un WAV en memoria (16 bits, mono). Es un sonido sintético: nunca se escribe en disco
+    y no tiene nada que ver con el micrófono, que BioFocus no abre."""
+    muestras = bytearray()
+    rampa = max(1, MUESTREO_HZ * RAMPA_MS // 1000)
+    for frecuencia, ms in TONOS[tipo]:
+        n = MUESTREO_HZ * ms // 1000
+        for i in range(n):
+            envolvente = min(1.0, i / rampa, (n - 1 - i) / rampa)
+            valor = 32767 * VOLUMEN * envolvente * math.sin(2 * math.pi * frecuencia * i / MUESTREO_HZ)
+            muestras += struct.pack("<h", int(valor))
+        muestras += bytes(2 * (MUESTREO_HZ * SILENCIO_ENTRE_TONOS_MS // 1000))
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(MUESTREO_HZ)
+        w.writeframes(bytes(muestras))
+    return buffer.getvalue()
+
+
 def sonar(tipo: str) -> None:
-    """Un sonido corto, en otro hilo para no frenar la cámara."""
+    """Un sonido corto, en otro hilo para no frenar la cámara.
+
+    Suena con PlaySound, por el audio normal de Windows, como cualquier programa (tarea J1). Antes era
+    winsound.Beep, el pitido del sistema, y en el equipo del autor no se oía. Si PlaySound falla, queda el sonido
+    de alerta de Windows.
+    """
     if sys.platform != "win32":
         return
     import winsound
 
-    tonos = {"postura": [(660, 160), (520, 220)], "distraccion": [(880, 140), (1175, 220)],
-             "pausa": [(523, 150), (659, 150), (784, 220)], "tiempo": [(784, 180), (523, 260)]}[tipo]
+    wav = sonido_wav(tipo)
 
     def tocar() -> None:
-        for frecuencia, ms in tonos:
-            winsound.Beep(frecuencia, ms)
+        try:
+            winsound.PlaySound(wav, winsound.SND_MEMORY | winsound.SND_NODEFAULT)
+        except RuntimeError:
+            try:
+                winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+            except RuntimeError:
+                pass
 
     threading.Thread(target=tocar, daemon=True).start()
 
@@ -339,6 +528,7 @@ COLOR_CATEGORIA = {  # RGB
 }
 NOMBRE_CATEGORIA = {"sirve": "sirve", "no_sirve": "no sirve", "neutro": "neutro", "sin_clasificar": "sin clasificar"}
 COLOR_POSTURA = {"bien": (46, 160, 67), "revisa": (230, 140, 0), "no_te_veo": (150, 150, 150), "calibrando": (56, 139, 253)}
+COLOR_MIRADA = (124, 58, 237)
 
 
 class Pantalla:
@@ -476,7 +666,7 @@ def verificar_modelo(ruta: Path = RUTA_MODELO) -> None:
 class Registro:
     """Escribe la sesión, los eventos y el estado en vivo. Solo lo usa el hilo principal."""
 
-    def __init__(self, ruta_bd: Path | None, meta: str, duracion_min: int, modo_demo: bool):
+    def __init__(self, ruta_bd: Path | None, meta: str, duracion_min: int, modo_demo: bool, sin_internet: bool = False):
         self.con = datos.conectar(ruta_bd)
         ahora = time.time()
         vivo.cerrar_huerfanas(self.con, datetime.fromtimestamp(ahora))
@@ -487,8 +677,9 @@ class Registro:
         self.inicio = ahora
         self.id = datos.crear_sesion(self.con, _ts(ahora), None, meta, duracion_min, es_demo=False)
         self.con.execute(
-            "INSERT INTO estado_monitor (sesion_id, pid, modo_demo, actualizado, postura) VALUES (?, ?, ?, ?, 'calibrando')",
-            (self.id, os.getpid(), 1 if modo_demo else 0, _ts(ahora)),
+            "INSERT INTO estado_monitor (sesion_id, pid, modo_demo, actualizado, postura, sin_internet) "
+            "VALUES (?, ?, ?, ?, 'calibrando', ?)",
+            (self.id, os.getpid(), 1 if modo_demo else 0, _ts(ahora), 1 if sin_internet else 0),
         )
         datos.agregar_evento(self.con, self.id, _ts(ahora), "inicio_sesion",
                              detalle="monitor en vivo" + (", modo demo" if modo_demo else ""))
@@ -511,6 +702,10 @@ class Registro:
     def pausa(self, inicio: float, duracion_s: float) -> None:
         datos.agregar_evento(self.con, self.id, _ts(inicio), "pausa", duracion_s=int(duracion_s),
                              detalle="fuera de cuadro")
+        self.con.commit()
+
+    def gesto(self, tipo: str, inicio: float, duracion_s: float) -> None:
+        datos.agregar_gesto(self.con, self.id, _ts(inicio), tipo, round(duracion_s))
         self.con.commit()
 
     def alerta(self, tipo: str, t: float, app: str | None = None, detalle: str = "") -> None:
@@ -541,6 +736,11 @@ class Registro:
         self.con.execute("UPDATE estado_monitor SET recalibrar = 0 WHERE sesion_id = ?", (self.id,))
         self.con.commit()
         return True
+
+    def pide_sin_internet(self) -> bool:
+        """Lo que marca ahora el interruptor «Modo sin internet» de la app para esta sesión (tarea J6)."""
+        fila = self.con.execute("SELECT sin_internet FROM estado_monitor WHERE sesion_id = ?", (self.id,)).fetchone()
+        return bool(fila and fila["sin_internet"])
 
     def cerrar(self, t: float, motivo: str) -> None:
         vivo.cerrar_sesion(self.con, self.id, datetime.fromtimestamp(t), motivo)
@@ -581,8 +781,12 @@ def correr(args: argparse.Namespace) -> int:
         num_poses=1,
     )
     detector = vision.PoseLandmarker.create_from_options(opciones)
+    # «Modo sin internet» (tarea J6): lo pide la app con --sin-internet, o lo fija OFFLINE_MODE en .env. Lo de .env
+    # no se puede apagar desde la app.
+    sin_internet_fijo = ventanas.sin_internet_en(ventanas.proveedor.leer_env())
+    sin_internet = args.sin_internet or sin_internet_fijo
     try:
-        registro = Registro(args.bd, args.meta, args.duracion, args.modo_demo)
+        registro = Registro(args.bd, args.meta, args.duracion, args.modo_demo, sin_internet)
     except ErrorMonitor:
         detector.close()
         fuente.release()
@@ -591,20 +795,28 @@ def correr(args: argparse.Namespace) -> int:
           f"{'Video: ' + str(args.video) if args.video else 'Cámara ' + str(args.camara)}"
           f"{' oculta' if args.ocultar_camara else ''}. q termina, c recalibra.", flush=True)
     print(f"Sensibilidad: caída {caida * 100:.0f} % durante {tiempos.postura_sostenida_s:.0f} s, "
-          f"distracción {tiempos.distraccion_s:.0f} s, pausa cada {tiempos.pausa_cada_s / 60:.1f} min.", flush=True)
+          f"distracción {tiempos.distraccion_s:.0f} s, pausa cada {tiempos.pausa_cada_s / 60:.1f} min, "
+          f"mirada fuera {MIRADA_DEMO_S if args.modo_demo else args.mirada_s} s"
+          f"{' (sin aviso)' if args.sin_alerta_mirada else ''}."
+          + (" Cámara visible solo al calibrar." if args.camara_al_calibrar and not args.ocultar_camara else ""), flush=True)
 
-    clasificador = ventanas.Clasificador(args.meta)
+    clasificador = ventanas.Clasificador(args.meta, sin_internet=sin_internet)
+    print(f"Clasificador: {clasificador.perfil.proveedor if clasificador.perfil else 'solo reglas'}"
+          f"{' (modo sin internet: ningún título sale del equipo)' if sin_internet else ''}.", flush=True)
     hilo = ventanas.HiloVentanas(ventanas.SeguidorVentanas(clasificador))
     hilo.start()
     postura = Postura(tiempos, time.time(), caida)
     distraccion = Distraccion(tiempos)
     pausas = Pausas(tiempos, time.time())
+    gestos = Gestos(MIRADA_DEMO_S if args.modo_demo else args.mirada_s, not args.sin_alerta_mirada, tiempos.cooldown_s)
     fin_del_plan = FinDelPlan(registro.inicio, args.duracion)
     emergentes = None if args.sin_ventana else emergente.Emergentes()
     pantalla = None if args.sin_ventana or args.ocultar_camara else Pantalla()
-    if pantalla:
-        cv2.namedWindow(TITULO_VENTANA, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(TITULO_VENTANA, 800, 600)
+    # Con «solo al calibrar» (tarea J2) la ventana se abre al calibrar y se cierra sola al tener la línea base.
+    solo_al_calibrar = pantalla is not None and args.camara_al_calibrar
+    ventana_abierta = False
+    calibrada_en: float | None = None  # cuándo quedó la línea base, para esconder la ventana un momento después
+    cerrada_a_mano = False  # la persona cerró la ventana de calibración: no se vuelve a abrir hasta recalibrar
     for nombre in ("SIGBREAK", "SIGINT"):
         if hasattr(signal, nombre):
             signal.signal(getattr(signal, nombre), _interrumpir)
@@ -668,6 +880,23 @@ def correr(args: argparse.Namespace) -> int:
                          "detalle": f"Tu cabeza bajó {abs(pct):.0f} % frente a tu línea base"}
                 print(f"ALERTA postura a los {t - registro.inicio:.1f} s ({pct:+.0f} %)", flush=True)
                 avisar(emergentes, aviso)
+            if postura.base is None:
+                calibrada_en = None
+            elif calibrada_en is None:
+                calibrada_en = t
+            terminados, alerta_mirada = gestos.actualizar(t, puntos, ancho, alto, postura.base is None)
+            for tipo, inicio_gesto, duracion in terminados:
+                registro.gesto(tipo, inicio_gesto, duracion)
+                nombre_gesto = "MANO en la cara" if tipo == "mano_cara" else "MIRADA fuera de la pantalla"
+                print(f"{nombre_gesto}: {duracion:.1f} s desde el s {inicio_gesto - registro.inicio:.1f}", flush=True)
+            if alerta_mirada:
+                segundos = int(gestos.mirada.dura())
+                registro.gesto("alerta_mirada", t, segundos)
+                aviso = {"tipo": "mirada", "hasta": t + AVISO_S, "color": COLOR_MIRADA,
+                         "titulo": "¿Sigues en tu pantalla?",
+                         "detalle": f"Llevas {segundos} s mirando hacia otro lado"}
+                print(f"ALERTA mirada fuera a los {t - registro.inicio:.1f} s ({segundos} s)", flush=True)
+                avisar(emergentes, aviso)
             pausa, recordar = pausas.actualizar(t, valor is not None, postura.base is not None)
             if pausa:
                 registro.pausa(*pausa)
@@ -698,7 +927,9 @@ def correr(args: argparse.Namespace) -> int:
                 aviso = None
             if args.detalle and t - ultimo_detalle >= 1:
                 ultimo_detalle = t
-                print(detalle_segundo(t - registro.inicio, valor, postura, foto), flush=True)
+                num = lambda x: "—" if x is None else f"{x:+.2f}"  # noqa: E731
+                print(detalle_segundo(t - registro.inicio, valor, postura, foto)
+                      + f" | mano–cara {num(gestos.distancia)} · giro {num(gestos.giro)}", flush=True)
 
             while True:
                 try:
@@ -710,12 +941,33 @@ def correr(args: argparse.Namespace) -> int:
                 if registro.latido(t, postura, foto):
                     motivo = "terminada desde la app"
                     break
+                pide = registro.pide_sin_internet() or sin_internet_fijo
+                if pide != sin_internet:  # interruptor «Modo sin internet» de la app (tarea J6)
+                    sin_internet = pide
+                    clasificador.usar_sin_internet(sin_internet)
+                    print(f"Modo sin internet {'encendido' if sin_internet else 'apagado'} a los "
+                          f"{t - registro.inicio:.0f} s: clasificador "
+                          f"{clasificador.perfil.proveedor if clasificador.perfil else 'solo reglas'}.", flush=True)
                 if registro.pidio_recalibrar():  # botón «Recalibrar postura» de la app (tarea I2)
                     postura.recalibrar(t)
-                    aviso = None
+                    gestos.recalibrar()
+                    aviso, calibrada_en, cerrada_a_mano = None, None, False
                     print(f"Recalibrando desde la app a los {t - registro.inicio:.0f} s.", flush=True)
 
-            if pantalla:
+            mostrar = pantalla is not None and (
+                not solo_al_calibrar
+                or (not cerrada_a_mano and (calibrada_en is None or t - calibrada_en < MOSTRAR_TRAS_CALIBRAR_S)))
+            if mostrar and not ventana_abierta:
+                cv2.namedWindow(TITULO_VENTANA, cv2.WINDOW_NORMAL)
+                cv2.resizeWindow(TITULO_VENTANA, 800, 600)
+                ventana_abierta, primera_vez = True, True
+            elif not mostrar and ventana_abierta:
+                cv2.destroyWindow(TITULO_VENTANA)
+                cv2.waitKey(1)
+                ventana_abierta = False
+                print(f"Línea base lista: escondo la cámara a los {t - registro.inicio:.0f} s.", flush=True)
+
+            if ventana_abierta:
                 transcurrido = t - registro.inicio
                 estado = {
                     "encabezado": f"BioFocus · {_mmss(transcurrido)} de {args.duracion} min"
@@ -739,22 +991,28 @@ def correr(args: argparse.Namespace) -> int:
                     break
                 if tecla in (ord("c"), ord("C")):
                     postura.recalibrar(t)
-                    aviso = None
+                    gestos.recalibrar()
+                    aviso, calibrada_en = None, None
                 if cv2.getWindowProperty(TITULO_VENTANA, cv2.WND_PROP_VISIBLE) < 1:
-                    motivo = "ventana del monitor cerrada"
-                    break
+                    if solo_al_calibrar:  # cerrar la ventana de calibración solo la esconde; la sesión sigue
+                        ventana_abierta, cerrada_a_mano = False, True
+                    else:
+                        motivo = "ventana del monitor cerrada"
+                        break
     except KeyboardInterrupt:
         motivo = "interrumpido"
     finally:
         for tramo in hilo.detener():
             registro.tramo(tramo)
+        for tipo, inicio_gesto, duracion in gestos.cerrar():
+            registro.gesto(tipo, inicio_gesto, duracion)
         final = pausas.cerrar(time.time())
         if final and motivo != "la cámara dejó de entregar cuadros":  # sin imagen no es una pausa
             registro.pausa(*final)
         registro.cerrar(time.time(), motivo)
         detector.close()
         fuente.release()
-        if pantalla:
+        if ventana_abierta:
             cv2.destroyAllWindows()
     print(f"Sesión {registro.id} terminada: {motivo}.", flush=True)
     return 0
@@ -787,6 +1045,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sin-ventana", action="store_true", help="para pruebas: sin ventana, sin sonido y sin avisos emergentes")
     p.add_argument("--ocultar-camara", action="store_true",
                    help="sin la ventana de la cámara; los avisos salen igual, emergentes y con sonido")
+    p.add_argument("--camara-al-calibrar", action="store_true",
+                   help="muestra la ventana de la cámara solo mientras calibra (al empezar y al recalibrar)")
+    p.add_argument("--mirada-s", type=_entero_entre(MIRADA_MIN_ALERTA_S, MIRADA_MAX_ALERTA_S), default=MIRADA_ALERTA_S,
+                   help=f"segundos mirando fuera de la pantalla antes de avisar ({MIRADA_MIN_ALERTA_S} a "
+                        f"{MIRADA_MAX_ALERTA_S}; en modo demo, {MIRADA_DEMO_S})")
+    p.add_argument("--sin-alerta-mirada", action="store_true",
+                   help="registra cuándo miras fuera de la pantalla, pero sin avisar")
+    p.add_argument("--sin-internet", action="store_true",
+                   help="los títulos ambiguos se clasifican con Ollama, en este equipo; nada sale a la nube")
     p.add_argument("--caida-postura", type=_entero_entre(CAIDA_MIN_PCT, CAIDA_MAX_PCT), default=round(CAIDA_ALERTA * 100),
                    help=f"%% bajo tu línea base que cuenta como mala postura ({CAIDA_MIN_PCT} a {CAIDA_MAX_PCT}; no aplica en modo demo)")
     p.add_argument("--postura-s", type=_entero_entre(POSTURA_MIN_S, POSTURA_MAX_S), default=int(NORMAL.postura_sostenida_s),

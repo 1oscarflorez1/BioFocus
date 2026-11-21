@@ -10,6 +10,7 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
 - G1: aprobado; no toca el código del producto. G2 tenía como condición que G1 pasara y que A, C y D estuvieran cerrados el 2026-11-15. Esa fecha pasó con A sin commit, así que G2 no entra: se renegocia en `docs/SPEC.md` con los números de G1.
 - H (modo sin internet): bloque nuevo, aprobado el 2026-11-17.
 - I (lo que salió de la prueba con el padre del autor): bloque nuevo, aprobado el 2026-11-20 («hagamos mejoras a las visuales: barra de pestañas, mejor accesibilidad, que el panel se esconda y calibrar a gusto desde el panel principal»).
+- J (pulido tras la entrega): bloque nuevo, aprobado el 2026-11-21 por el autor («quiero que pulamos o arreglemos los siguientes aspectos»), con la lista de abajo. Va después de la entrega del 2026-11-20 y queda en git con su fecha.
 - Decisiones menores en `docs/decisiones/m3-decisiones.md`.
 
 ## Estado al 2026-11-21
@@ -29,6 +30,7 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
 | H2 y H3 | Hecho: 34/36 en local (`docs/decisiones/semana14.md`); el plan B es el modo local | `2026-11-18_0426.json` |
 | I1 a I4 | Hecho el 2026-11-20: aviso emergente, cámara oculta, recalibrar y sensibilidad desde la app, pestañas y «Mis registros». Verificado con `encorvado.mp4`, una base temporal y la vista previa | `462d42b` |
 | I5 | Hecho: SPEC, seguridad, gobernanza, auditoría, guion, prueba, README y `docs/ENTREGA.md` | `462d42b` |
+| J1 a J6 | Hecho el 2026-11-21, después de la entrega: sonido por el audio normal, cámara solo al calibrar, metas recientes, tema y pestaña «Última sesión real», mano en la cara y mirada fuera, e interruptor «Modo sin internet». 121 pruebas, los tres videos y la vista previa. **Falta:** que el autor oiga el sonido y pruebe la mano en la cara con su cámara | «Momento 3, bloque J» |
 
 ## Respuestas del 2026-11-17
 1. **Equipo:** trabajo individual, avalado por el docente como excepción por incapacidad. Queda constancia en `docs/SPEC.md`. La sustentación se prepara para una sola persona.
@@ -120,6 +122,16 @@ La prueba (`docs/decisiones/prueba-companero-2026-11-20.md`) mostró que las ale
 34. **I3 · Sensibilidad a gusto** (`monitor.py`, `app.py`). Cuánto puede bajar la cabeza (20 a 40 %), segundos encorvado, segundos en algo que no sirve y cada cuánto recordar la pausa, con topes y su porqué. El modo demo no los usa, para que la demo salga igual siempre. ¿Un cambio en «Ajustes» queda guardado y llega al monitor de la siguiente sesión?
 35. **I4 · Pestañas, registros con filtros y accesibilidad** (`app.py`, `vivo.py`). Pestañas Sesión, Coach, Mis registros y Ajustes; la barra lateral solo con las opciones técnicas, plegada. «Mis registros» lista las sesiones con filtros por origen y fechas, cifras y gráficos. Textos con etiqueta, nombres accesibles en gráficos y tablas, y colores que no son la única señal. ¿Una persona ajena encuentra sus registros y la sensibilidad sin ayuda?
 36. **I5 · Documentos de la entrega al día.** SPEC, seguridad, gobernanza, respuesta a la auditoría, guion, la prueba («Qué cambié»), README y un índice de la entrega (`docs/ENTREGA.md`) que lleva cada entregable de la rúbrica a su archivo. ¿Cada entregable apunta a su evidencia y `verificar_citas.py` da 0 malas?
+
+## J · Pulido tras la entrega (aprobado el 2026-11-21)
+Lo pide el autor al usar la app nueva. El coach (`agente.py`, `herramientas.py`, `proveedor.py`) y los datos demo no se tocan, para que las cifras de E2 sigan valiendo.
+
+37. **J1 · Sonido que se oiga** (`monitor.py`). El pitido de `winsound.Beep` no sonaba en el equipo del autor. ¿Cada aviso suena por el audio normal de Windows, como cualquier programa, y el autor lo oye?
+38. **J2 · Ver la cámara solo al calibrar** (`monitor.py`, `app.py`). La opción «Imagen de la cámara» tiene tres valores: solo al calibrar, toda la sesión o nunca. ¿Con «solo al calibrar», la ventana aparece al empezar y al recalibrar, y se esconde sola cuando hay línea base?
+39. **J3 · Metas recientes** (`vivo.py`, `app.py`). ¿Las últimas metas de sesiones reales salen para elegirlas con un clic y llenan el campo?
+40. **J4 · Interfaz** (`app.py`, `.streamlit/config.toml`). Título más grande, tema propio y pestañas con letra más grande. La última sesión pasa a su propia pestaña, «Última sesión real». ¿Se ve así y la pestaña Sesión ya no la muestra?
+41. **J5 · Mano en la cara y mirada fuera de la pantalla** (`monitor.py`, `datos.py`, `vivo.py`, `app.py`, `aviso.py`). Con los mismos puntos de pose, sin otro modelo: cuántas veces y cuánto tiempo la mano toca la cara, y cuándo la cabeza gira lejos de la pantalla, con alerta configurable. Se guarda en una tabla aparte (`gestos`), así que el coach no la ve. ¿Con los videos, `derecho.mp4` no marca nada, el tramo «mirando a un lado» de `distraido.mp4` sí, y los episodios quedan en la base con su duración?
+42. **J6 · Interruptor «Modo sin internet»** (`app.py`, `monitor.py`, `ventanas.py`, `datos.py`, `vivo.py`). Pedido el 2026-11-21 para sesiones con datos sensibles en pantalla. Hoy el modo local solo se activa editando `.env` y reiniciando. El interruptor queda arriba, en todas las pestañas, y se recuerda. No toca el coach: le pasa los perfiles de Ollama, como ya hace `.env`. Si `.env` fija el modo local, el interruptor queda encendido y no se puede apagar. ¿Al encenderlo, el coach usa Ollama desde la siguiente pregunta y el monitor deja de mandar títulos a la nube en menos de 1 s, aun con la sesión en curso, sin volver a la nube si Ollama no responde?
 
 ## Se renegocia por escrito en `docs/SPEC.md` (no cabe antes del 19)
 | Idea de la propuesta inicial | Por qué no cabe |

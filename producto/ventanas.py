@@ -272,10 +272,27 @@ class Clasificacion:
     fuente: str  # privado | neutro | regla | distraccion | sin_informacion | instrucciones | llm | cache | fallo | limite
 
 
+VALORES_VERDADEROS = ("1", "true", "si", "sí", "yes")  # los mismos que acepta proveedor.perfiles_configurados
+
+
+def sin_internet_en(env: dict[str, str]) -> bool:
+    """True si .env (o el entorno) fija OFFLINE_MODE: entonces el interruptor de la app no lo puede apagar."""
+    return env.get("OFFLINE_MODE", "").strip().lower() in VALORES_VERDADEROS
+
+
+def entorno_llm(sin_internet: bool, env: dict[str, str] | None = None) -> dict[str, str]:
+    """La configuración de .env, con OFFLINE_MODE encendido si la persona eligió «Modo sin internet» (tarea J6).
+    Apagar el interruptor nunca apaga un OFFLINE_MODE que venga de .env."""
+    env = dict(proveedor.leer_env() if env is None else env)
+    if sin_internet:
+        env["OFFLINE_MODE"] = "true"
+    return env
+
+
 def perfil_clasificador(env: dict[str, str] | None = None) -> proveedor.Perfil | None:
     """Groq con gpt-oss-20b por defecto. LLM_CLASIFICADOR_PROVIDER/MODEL lo cambian (ollama = local)."""
     env = proveedor.leer_env() if env is None else env
-    if env.get("OFFLINE_MODE", "").strip().lower() in ("1", "true", "si", "sí", "yes"):
+    if sin_internet_en(env):
         prov, modelo = "ollama", ""
     else:
         prov = env.get("LLM_CLASIFICADOR_PROVIDER", "").strip().lower() or CLASIFICADOR_POR_DEFECTO[0]
@@ -358,16 +375,16 @@ class Clasificador:
         ruta_reglas_persona: Path = RUTA_REGLAS_PERSONA,
         llm: Callable[[str, str, str], tuple[str, str]] | None = None,
         reloj: Callable[[], float] = time.monotonic,
+        sin_internet: bool = False,
     ):
         self.meta = meta
         self.reglas = reglas or cargar_reglas_fijas()
         self.ruta_persona = Path(ruta_reglas_persona)
+        self.perfil: proveedor.Perfil | None = None
         if llm is None:
-            perfil = perfil_clasificador()
-            llm = llm_real(perfil)
-            if perfil is not None and perfil.proveedor == "ollama":
-                calentar(perfil)
-        self._llm = llm
+            self.usar_sin_internet(sin_internet)
+        else:
+            self._llm = llm
         self._reloj = reloj
         self._cache: dict[tuple[str, str], tuple[str, str]] = {}
         self._fallos: dict[tuple[str, str], float] = {}
@@ -375,6 +392,15 @@ class Clasificador:
         self._mtime: float | None = None
         self._recientes: deque[float] = deque()  # momento de cada consulta al LLM del último minuto
         self.llamadas_llm = 0
+
+    def usar_sin_internet(self, activo: bool) -> None:
+        """Elige el modelo del clasificador; el monitor lo llama de nuevo si la persona cambia el interruptor en plena
+        sesión (tarea J6). Desde el cambio, la siguiente consulta ya va al modelo local: si Ollama no responde, el
+        título queda sin clasificar y no sale. Una consulta que ya estaba en camino a la nube no se puede recoger."""
+        self.perfil = perfil_clasificador(entorno_llm(activo))
+        self._llm = llm_real(self.perfil)
+        if self.perfil is not None and self.perfil.proveedor == "ollama":
+            calentar(self.perfil)
 
     def ignorar(self, v: Ventana) -> bool:
         return v.proceso in self.reglas.ignorar_procesos or any(p.search(v.titulo) for p in self.reglas.ignorar_titulos)

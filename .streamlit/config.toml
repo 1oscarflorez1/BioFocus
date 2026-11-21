@@ -6,3 +6,17 @@ gatherUsageStats = false
 headless = true
 address = "localhost"
 port = 8501
+
+# Tema propio (tarea J4). Sin fuentes de internet: la app tiene que verse igual sin conexión (plan B).
+# Las claves de [theme] valen en claro y oscuro; los colores van en cada modo para que se pueda cambiar entre ellos.
+[theme]
+baseRadius = "0.75rem"
+headingFontSizes = ["3.25rem", "1.75rem", "1.4rem", "1.2rem", "1rem", "0.9rem"]  # título bien grande
+headingFontWeights = [800, 700, 600, 600, 600, 500]
+metricValueFontSize = "1.9rem"
+
+[theme.light]
+primaryColor = "#0F766E"  # verde azulado: el botón principal y lo seleccionado
+
+[theme.dark]
+primaryColor = "#14B8A6"

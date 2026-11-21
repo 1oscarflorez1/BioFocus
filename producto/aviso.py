@@ -23,8 +23,9 @@ MAX_TEXTO = 90  # una línea corta: el detalle del monitor nunca lleva títulos 
 ANCHO, ALTO = 400, 112  # px; cabe en una pantalla de 1366 × 768 sin tapar el centro
 MARGEN_DERECHO, MARGEN_INFERIOR = 24, 72  # px; encima de la barra de tareas de Windows (48 px)
 # Fondo oscuro y texto blanco: contraste de 4,5:1 o más (WCAG AA). El tipo también va escrito, no solo en el color.
-COLORES = {"postura": "#B45309", "distraccion": "#B91C1C", "pausa": "#1D4ED8", "tiempo": "#0F766E"}
-ETIQUETAS = {"postura": "Postura", "distraccion": "Distracción", "pausa": "Pausa", "tiempo": "Tiempo cumplido"}
+COLORES = {"postura": "#B45309", "distraccion": "#B91C1C", "pausa": "#1D4ED8", "tiempo": "#0F766E", "mirada": "#6D28D9"}
+ETIQUETAS = {"postura": "Postura", "distraccion": "Distracción", "pausa": "Pausa", "tiempo": "Tiempo cumplido",
+             "mirada": "Mirada fuera de la pantalla"}
 SIN_CONSOLA = 0x08000000  # CREATE_NO_WINDOW: el proceso del aviso no abre una consola negra
 
 

@@ -18,6 +18,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.request
 from contextlib import closing
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -32,6 +33,7 @@ import herramientas
 import monitor
 import proveedor
 import trazas
+import ventanas
 import vivo
 
 # El título empieza por "BioFocus ·": reglas.json cuenta esta pestaña como neutra.
@@ -43,9 +45,10 @@ LOG_MONITOR = RAIZ / "data" / "monitor.log"
 PREFERENCIAS = RAIZ / "data" / "preferencias.json"  # lo de la última sesión y la sensibilidad (sin la meta)
 # Uso diario: 50 min, tiempos normales, la cámara trabajando escondida y la sensibilidad del experimento 01.
 POR_DEFECTO = {
-    "duracion": 50, "modo_demo": False, "imagen": "Cámara", "ver_camara": False,
+    "duracion": 50, "modo_demo": False, "imagen": "Cámara", "camara": "al_calibrar",
     "caida_postura": round(monitor.CAIDA_ALERTA * 100), "postura_s": int(monitor.NORMAL.postura_sostenida_s),
     "distraccion_s": int(monitor.NORMAL.distraccion_s), "pausa_cada_min": int(monitor.NORMAL.pausa_cada_s // 60),
+    "avisar_mirada": True, "mirada_s": monitor.MIRADA_ALERTA_S, "sin_internet": False,
 }
 # Topes de cada valor guardado: los mismos del monitor, que los vuelve a validar al arrancar.
 TOPES = {
@@ -54,22 +57,34 @@ TOPES = {
     "postura_s": (monitor.POSTURA_MIN_S, monitor.POSTURA_MAX_S),
     "distraccion_s": (monitor.DISTRACCION_MIN_S, monitor.DISTRACCION_MAX_S),
     "pausa_cada_min": (monitor.PAUSA_MIN_MIN, monitor.PAUSA_MAX_MIN),
+    "mirada_s": (monitor.MIRADA_MIN_ALERTA_S, monitor.MIRADA_MAX_ALERTA_S),
 }
+# Cuándo se ve la ventana de la cámara (tarea J2). Por defecto solo al calibrar: la persona se ve para sentarse
+# derecha y después la ventana no tapa el trabajo.
+VISTAS_CAMARA = {"al_calibrar": "Solo al calibrar", "siempre": "Toda la sesión", "nunca": "Nunca"}
 GRABACIONES = RAIZ / "grabaciones"
 ARRANQUE_MAX_S = 40  # MediaPipe y la cámara tardan unos segundos en abrir
 PARADA_MAX_S = 12
 LOG_MAX_BYTES = 512 * 1024  # tope de data/monitor.log
 BOTON_EMPEZAR = "Empezar sesión de estudio"  # «Iniciar sesión» se leía como entrar con usuario y contraseña
 AVISO_INICIO = (
-    "Al empezar se enciende la cámara. La imagen se procesa en este equipo y no se guarda; si eliges verla, se abre "
-    "la ventana «BioFocus monitor». Los avisos salen en una ventanita encima de todo, abajo a la derecha, con un "
-    "sonido. Los títulos de ventanas que no son obvias van a Groq, con tu meta, para decidir si sirven; los de banco, "
-    "correo y contraseñas nunca salen. Termina cuando quieras con «Terminar sesión»."
+    "Al empezar se enciende la cámara. La imagen se procesa en este equipo y no se guarda; la ventana «BioFocus "
+    "monitor» se ve según elijas en «Imagen de la cámara». Además de la postura, cuenta cuándo te tocas la cara y "
+    "cuándo miras fuera de la pantalla: solo guarda la hora y cuánto duró. Los avisos salen en una ventanita encima "
+    "de todo, abajo a la derecha, con un sonido. {titulos} Termina cuando quieras con «Terminar sesión»."
 )
+TITULOS_NUBE = ("Los títulos de ventanas que no son obvias van a Groq, con tu meta, para decidir si sirven; los de "
+                "banco, correo y contraseñas nunca salen. Si vas a tener datos sensibles en pantalla, enciende «Modo "
+                "sin internet».")
+TITULOS_LOCAL = ("Modo sin internet: los títulos que no son obvios se clasifican con el modelo local (Ollama) y nada "
+                 "sale del equipo.")
+URL_OLLAMA = proveedor.BASES["ollama"].removesuffix("/v1") + "/api/tags"
+OLLAMA_ESPERA_S = 0.8  # localhost responde en milisegundos; más que esto es que Ollama no está abierto
 ORIGENES_COACH = {"reales": "Mis sesiones reales", "demo": "Semana de datos demo"}
 CONFIRMACION_BORRADO = "BORRAR"
 PESTANAS = {
     "sesion": ":material/self_improvement: Sesión",
+    "ultima": ":material/history: Última sesión real",
     "coach": ":material/forum: Coach",
     "registros": ":material/bar_chart: Mis registros",
     "ajustes": ":material/tune: Ajustes",
@@ -107,7 +122,12 @@ def cargar_preferencias() -> dict:
     for clave, (minimo, maximo) in TOPES.items():
         if not isinstance(pref[clave], int) or isinstance(pref[clave], bool) or not minimo <= pref[clave] <= maximo:
             pref[clave] = POR_DEFECTO[clave]
-    pref["modo_demo"], pref["ver_camara"] = bool(pref["modo_demo"]), bool(pref["ver_camara"])
+    if "camara" not in guardadas and guardadas.get("ver_camara") is True:
+        pref["camara"] = "siempre"  # preferencia de antes de la tarea J2: «Ver la imagen de la cámara» encendido
+    if pref["camara"] not in VISTAS_CAMARA:
+        pref["camara"] = POR_DEFECTO["camara"]
+    pref["modo_demo"], pref["avisar_mirada"] = bool(pref["modo_demo"]), bool(pref["avisar_mirada"])
+    pref["sin_internet"] = pref["sin_internet"] is True  # solo un true explícito lo enciende
     return pref
 
 
@@ -120,17 +140,26 @@ def guardar_preferencias(**cambios) -> None:
 
 
 def texto_sensibilidad(pref: dict, demo: bool) -> str:
+    segundos_mirada = monitor.MIRADA_DEMO_S if demo else pref["mirada_s"]
+    mirada = f" · mirada fuera a los {segundos_mirada} s" if pref["avisar_mirada"] else " · mirada fuera sin aviso"
     if demo:
         d = monitor.DEMO
         return (f"Modo demo: postura si tu cabeza baja más de {round(monitor.CAIDA_ALERTA * 100)} % durante "
-                f"{d.postura_sostenida_s:.0f} s · distracción a los {d.distraccion_s:.0f} s · pausa a los {d.pausa_cada_s:.0f} s")
+                f"{d.postura_sostenida_s:.0f} s · distracción a los {d.distraccion_s:.0f} s · pausa a los "
+                f"{d.pausa_cada_s:.0f} s{mirada}")
     return (f"Postura si tu cabeza baja más de {pref['caida_postura']} % durante {pref['postura_s']} s · distracción a "
-            f"los {pref['distraccion_s']} s · pausa cada {pref['pausa_cada_min']} min")
+            f"los {pref['distraccion_s']} s · pausa cada {pref['pausa_cada_min']} min{mirada}")
 
 
 def _mmss(segundos: float) -> str:
     s = max(0, int(segundos))
     return f"{s // 60:02d}:{s % 60:02d}"
+
+
+def _duracion(segundos: float) -> str:
+    """45 s, o 3 min 20 s: para los tiempos con la mano en la cara o mirando fuera."""
+    s = max(0, int(segundos))
+    return f"{s} s" if s < 60 else f"{s // 60} min {s % 60} s"
 
 
 # ---------------------------------------------------------------- proveedor
@@ -186,9 +215,16 @@ def comando_monitor(meta: str, duracion: int, demo: bool, video: Path | None, pr
         cmd.append("--modo-demo")  # el modo demo usa sus tiempos fijos: la sensibilidad no se manda
     else:
         cmd += ["--caida-postura", str(pref["caida_postura"]), "--postura-s", str(pref["postura_s"]),
-                "--distraccion-s", str(pref["distraccion_s"]), "--pausa-cada-min", str(pref["pausa_cada_min"])]
-    if not pref["ver_camara"]:
+                "--distraccion-s", str(pref["distraccion_s"]), "--pausa-cada-min", str(pref["pausa_cada_min"]),
+                "--mirada-s", str(pref["mirada_s"])]
+    if not pref["avisar_mirada"]:  # el interruptor vale también en modo demo: el público mira para todos lados
+        cmd.append("--sin-alerta-mirada")
+    if pref["sin_internet"]:
+        cmd.append("--sin-internet")
+    if pref["camara"] == "nunca":
         cmd.append("--ocultar-camara")
+    elif pref["camara"] == "al_calibrar":
+        cmd.append("--camara-al-calibrar")
     if video:
         cmd += ["--video", str(video)]
     return cmd
@@ -203,7 +239,7 @@ def iniciar_monitor(meta: str, duracion: int, demo: bool, video: Path | None, pr
     lanzado = datetime.now().replace(microsecond=0).strftime(datos.FORMATO)
     with open(LOG_MONITOR, "a", encoding="utf-8") as log:
         log.write(f"\n=== {datetime.now():%Y-%m-%d %H:%M:%S} · desde la app · {'modo demo' if demo else 'normal'}"
-                  f" · {video.name if video else 'cámara'}{'' if pref['ver_camara'] else ' oculta'}\n")
+                  f" · {video.name if video else 'cámara'} · imagen {VISTAS_CAMARA[pref['camara']].lower()}\n")
         log.flush()
         proceso = subprocess.Popen(cmd, cwd=RAIZ, stdout=log, stderr=subprocess.STDOUT, creationflags=flags,
                                    env={**os.environ, "PYTHONIOENCODING": "utf-8"})
@@ -268,31 +304,47 @@ def controles_en_curso(fila) -> None:
         st.rerun()
 
 
+def _usar_meta_reciente() -> None:
+    """Al elegir una meta reciente, llena el campo de la meta (corre antes de dibujar el formulario)."""
+    elegida = st.session_state.get("meta_reciente")
+    if elegida:
+        st.session_state.meta_sesion = elegida
+
+
 def formulario_inicio() -> None:
     videos = sorted(GRABACIONES.glob("*.mp4")) if GRABACIONES.is_dir() else []
     pref = cargar_preferencias()  # lo de la última sesión: abrir y empezar es una meta y un clic
+    with _bd() as con:
+        recientes = vivo.metas_recientes(con)
+    st.markdown("**Empieza una sesión de estudio.** Escribe qué quieres lograr, o elige una meta reciente, y presiona "
+                "el botón.")
+    if recientes:  # botones y no una lista desplegable: con una lista, lo escrito sin Enter se perdía al empezar
+        st.pills("Metas recientes", recientes, key="meta_reciente", on_change=_usar_meta_reciente,
+                 format_func=lambda m: m if len(m) <= 45 else m[:44] + "…",
+                 help="Un clic la copia en «¿Qué quieres lograr en esta sesión?». Puedes cambiarla antes de empezar.")
     with st.form("iniciar_sesion"):
-        st.markdown("**Empieza una sesión de estudio.** Escribe qué quieres lograr y presiona el botón.")
         meta = st.text_input("¿Qué quieres lograr en esta sesión?", placeholder="Ej.: repasar integración por partes",
-                             max_chars=200)
+                             max_chars=200, key="meta_sesion")
         imagenes = ["Cámara"] + [v.name for v in videos]
         c1, c2 = st.columns(2)
         duracion = c1.number_input("Duración (min)", min_value=1, max_value=600, value=pref["duracion"])
         fuente = c2.selectbox("Imagen", imagenes,
                               index=imagenes.index(pref["imagen"]) if pref["imagen"] in imagenes else 0,
                               help="Plan B: un video de grabaciones/ en vez de la cámara.")
-        c3, c4 = st.columns(2)
-        ver = c3.toggle("Ver la imagen de la cámara", value=pref["ver_camara"],
-                        help="Apagado, la cámara trabaja escondida y los avisos salen igual, encima de todo.")
+        c3, c4 = st.columns(2, vertical_alignment="bottom")
+        camara = c3.segmented_control(
+            "Imagen de la cámara", list(VISTAS_CAMARA), format_func=VISTAS_CAMARA.get, default=pref["camara"],
+            required=True, help="Solo al calibrar: te ves mientras te sientas derecho y la ventana se esconde sola. "
+                                "En todos los casos los avisos salen igual, encima de todo.")
         demo = c4.toggle("Modo demo (tiempos cortos)", value=pref["modo_demo"],
                          help="Para mostrar la app: postura 5 s, distracción 10 s y 30 s entre alertas del mismo tipo.")
-        st.info(AVISO_INICIO, icon=":material/photo_camera:")
+        st.info(AVISO_INICIO.format(titulos=TITULOS_LOCAL if sin_internet else TITULOS_NUBE), icon=":material/photo_camera:")
         if st.form_submit_button(BOTON_EMPEZAR, type="primary", icon=":material/play_arrow:"):
             if not meta.strip():
                 st.error("Escribe la meta: el monitor la usa para decidir qué ventanas sirven.")
                 return
             video = GRABACIONES / fuente if fuente != "Cámara" else None
-            guardar_preferencias(duracion=int(duracion), modo_demo=bool(demo), imagen=fuente, ver_camara=bool(ver))
+            guardar_preferencias(duracion=int(duracion), modo_demo=bool(demo), imagen=fuente, camara=camara)
             with st.spinner("Abriendo el monitor (cámara y MediaPipe)… siéntate derecho para calibrar."):
                 error = iniciar_monitor(meta.strip(), int(duracion), demo, video, cargar_preferencias())
             st.session_state.aviso_sesion = error or (
@@ -373,17 +425,34 @@ def grafico_alertas_por_dia(por_dia: list[dict]):
 
 
 def panel_en_vivo() -> None:
-    """Se refresca cada 2 s solo mientras hay una sesión en curso (sin sesión, el refresco cerraría los menús del formulario)."""
+    """Se refresca cada 2 s solo mientras hay una sesión en curso (sin sesión, el refresco cerraría los menús del formulario).
+    La última sesión terminada ya no va aquí: tiene su pestaña (tarea J4)."""
     ahora = datetime.now()
     with _bd() as con:
         fila = vivo.sesion_en_curso(con)
-        sesion_id = fila["id"] if fila else vivo.ultima_sesion_real(con)
-        r = vivo.resumen(con, sesion_id, ahora, con_meta=True) if sesion_id else None
+        r = vivo.resumen(con, fila["id"], ahora, con_meta=True) if fila else None
     if (fila is not None) != st.session_state.get("habia_sesion", False):
         st.rerun()  # la sesión empezó o terminó fuera de esta página (terminal, tecla q): refresca los controles
     if r is None:
-        st.info(f"Todavía no hay sesiones reales. Escribe una meta y presiona «{BOTON_EMPEZAR}».")
+        st.caption("Cuando termines una sesión, su resumen queda en la pestaña «Última sesión real».")
         return
+    mostrar_sesion(r, ahora)
+
+
+def panel_ultima_sesion() -> None:
+    """La pestaña «Última sesión real»: la sesión real más reciente que ya terminó (tarea J4)."""
+    ahora = datetime.now()
+    with _bd() as con:
+        sesion_id = vivo.ultima_sesion_real(con, terminada=True)
+        r = vivo.resumen(con, sesion_id, ahora, con_meta=True) if sesion_id else None
+    if r is None:
+        st.info(f"Todavía no hay sesiones reales terminadas. En «Sesión», escribe una meta y presiona «{BOTON_EMPEZAR}».")
+        return
+    mostrar_sesion(r, ahora)
+
+
+def mostrar_sesion(r: dict, ahora: datetime) -> None:
+    """Cifras, alertas, gestos y gráficos de una sesión: la que está en curso o la última terminada."""
     en_curso = r["estado"] == "en curso"
     st.markdown(f"#### {'Sesión en vivo' if en_curso else 'Última sesión real'}")
     st.caption(
@@ -410,9 +479,19 @@ def panel_en_vivo() -> None:
                   f"{pct:+.0f} % frente a tu línea base" if pct is not None else "sin línea base todavía", delta_color="off", delta_arrow="off")
     else:
         c3.metric("Postura", "—", "sin datos", delta_color="off", delta_arrow="off")
-    c4.metric("Alertas", f"{r['alertas_postura']} · {r['alertas_distraccion']}", "postura · distracción", delta_color="off", delta_arrow="off")
-    if r["pausas"]:
-        st.caption(f"Pausas en esta sesión: {r['pausas']} (salir de cuadro {'10 s' if r['modo_demo'] else '1 min'} o más).")
+    g = r["gestos"]
+    c4.metric("Alertas", f"{r['alertas_postura']} · {r['alertas_distraccion']} · {g['alertas_mirada']}",
+              "postura · distracción · mirada", delta_color="off", delta_arrow="off")
+    g1, g2, g3 = st.columns(3)
+    g1.metric("Mano en la cara", f"{g['mano_cara_n']} {'vez' if g['mano_cara_n'] == 1 else 'veces'}",
+              f"{_duracion(g['mano_cara_s'])} en total", delta_color="off", delta_arrow="off",
+              help=f"Cuenta si la mano queda en la cara {monitor.MANO_CARA_MIN_S:.0f} s o más.")
+    g2.metric("Mirada fuera de la pantalla", f"{g['mirada_fuera_n']} {'vez' if g['mirada_fuera_n'] == 1 else 'veces'}",
+              f"{_duracion(g['mirada_fuera_s'])} en total", delta_color="off", delta_arrow="off",
+              help=f"Cuenta si la cabeza gira lejos de la pantalla {monitor.MIRADA_MIN_S:.0f} s o más, frente a como "
+                   "estabas al calibrar.")
+    g3.metric("Pausas", r["pausas"], f"salir de cuadro {'10 s' if r['modo_demo'] else '1 min'} o más",
+              delta_color="off", delta_arrow="off")
 
     if r["alertas"]:
         a = r["alertas"][-1]
@@ -473,6 +552,12 @@ def panel_registros() -> None:
     m4.metric("Alertas de distracción", sum(s["alertas_distraccion"] for s in sesiones), border=True)
     m5.metric("Pausas", sum(s["pausas"] for s in sesiones), border=True,
               help="Veces que saliste de cuadro el tiempo de una pausa.")
+    n1, n2, n3, _, _ = st.columns(5)
+    n1.metric("Mano en la cara", sum(s["mano_cara_n"] for s in sesiones), border=True,
+              help=f"Veces, con {_duracion(sum(s['mano_cara_s'] for s in sesiones))} en total.")
+    n2.metric("Mirada fuera de la pantalla", sum(s["mirada_fuera_n"] for s in sesiones), border=True,
+              help=f"Veces, con {_duracion(sum(s['mirada_fuera_s'] for s in sesiones))} en total.")
+    n3.metric("Alertas de mirada", sum(s["alertas_mirada"] for s in sesiones), border=True)
 
     izquierda, derecha = st.columns(2)
     with izquierda.container(border=True):
@@ -491,6 +576,7 @@ def panel_registros() -> None:
     tabla = pd.DataFrame([{
         "Inicio": s["inicio"][:16], "Meta": s["meta"], "Minutos": s["minutos"], "Plan (min)": s["plan_min"],
         "Postura": s["alertas_postura"], "Distracción": s["alertas_distraccion"], "Pausas": s["pausas"],
+        "Mano en la cara": s["mano_cara_n"], "Mirada fuera": s["mirada_fuera_n"],
         "Min. en lo que no sirve": s["min_no_sirve"], "Estado": s["estado"],
     } for s in sesiones])
     st.dataframe(
@@ -500,8 +586,11 @@ def panel_registros() -> None:
             "Minutos": st.column_config.NumberColumn(format="%.1f", help="Vacío si la sesión sigue abierta."),
             "Postura": st.column_config.NumberColumn(help="Alertas de postura"),
             "Distracción": st.column_config.NumberColumn(help="Alertas de distracción"),
+            "Mano en la cara": st.column_config.NumberColumn(help="Veces que la mano quedó en la cara 1 s o más"),
+            "Mirada fuera": st.column_config.NumberColumn(help="Veces que miraste fuera de la pantalla 2 s o más"),
         },
-        alt="Tabla de sesiones con inicio, meta, minutos, plan, alertas, pausas, minutos en lo que no sirve y estado",
+        alt="Tabla de sesiones con inicio, meta, minutos, plan, alertas, pausas, mano en la cara, mirada fuera, "
+            "minutos en lo que no sirve y estado",
     )
 
     elegida = st.selectbox("Ver la línea de tiempo de una sesión", [s["id"] for s in sesiones],
@@ -534,13 +623,22 @@ def panel_sensibilidad() -> None:
                                   help="Menos de 10 s cortaría un vistazo rápido a otra ventana.")
         pausa = st.slider("Recordarme una pausa cada (minutos)", monitor.PAUSA_MIN_MIN, monitor.PAUSA_MAX_MIN,
                           pref["pausa_cada_min"], step=5)
+        avisar_mirada = st.toggle("Avisar cuando miro fuera de la pantalla", pref["avisar_mirada"],
+                                  help="Vale también en modo demo. Apagado, BioFocus igual cuenta cuántas veces y cuánto "
+                                       "tiempo miras fuera, pero no avisa: sirve si usas otra pantalla o lees en papel.")
+        mirada_s = st.slider("Segundos mirando fuera antes de avisar", monitor.MIRADA_MIN_ALERTA_S,
+                             monitor.MIRADA_MAX_ALERTA_S, pref["mirada_s"], step=5,
+                             help="Fuera de la pantalla es girar la cabeza frente a como estabas al calibrar. "
+                                  "Menos de 5 s avisaría por mirar la libreta.")
         guardar, restablecer = st.columns(2)
         if guardar.form_submit_button("Guardar", type="primary", icon=":material/save:", width="stretch"):
-            guardar_preferencias(caida_postura=caida, postura_s=postura_s, distraccion_s=distraccion_s, pausa_cada_min=pausa)
+            guardar_preferencias(caida_postura=caida, postura_s=postura_s, distraccion_s=distraccion_s, pausa_cada_min=pausa,
+                                 avisar_mirada=bool(avisar_mirada), mirada_s=mirada_s)
             st.session_state.aviso_sesion = "Ajustes guardados: se usan desde la próxima sesión."
             st.rerun()
         if restablecer.form_submit_button("Volver a los valores de fábrica", icon=":material/restart_alt:", width="stretch"):
-            guardar_preferencias(**{k: POR_DEFECTO[k] for k in ("caida_postura", "postura_s", "distraccion_s", "pausa_cada_min")})
+            guardar_preferencias(**{k: POR_DEFECTO[k] for k in ("caida_postura", "postura_s", "distraccion_s", "pausa_cada_min",
+                                                                 "avisar_mirada", "mirada_s")})
             st.session_state.aviso_sesion = "Ajustes guardados: volvieron los valores de fábrica."
             st.rerun()
 
@@ -593,14 +691,48 @@ def panel_borrar() -> None:
 def panel_privacidad() -> None:
     st.subheader("Tus datos")
     st.markdown(
-        "- **La cámara** se procesa en este equipo; ninguna imagen se guarda ni sale.\n"
+        "- **La cámara** se procesa en este equipo; ninguna imagen se guarda ni sale. De la mano en la cara y de la "
+        "mirada fuera de la pantalla solo se guarda cuándo empezó cada vez y cuánto duró.\n"
         "- **La base** (`data/biofocus.sqlite`) guarda sesiones y eventos: app, categoría, duración y alertas. "
         "Nunca títulos de ventana.\n"
         "- **Sale del equipo:** los títulos de ventana ambiguos y no privados, con tu meta, para clasificarlos; y lo "
-        "que escribes al coach con cifras agregadas. Con `OFFLINE_MODE=true` en `.env` no sale nada.\n"
+        "que escribes al coach con cifras agregadas. Con «Modo sin internet» encendido (arriba, en todas las "
+        "pestañas) no sale nada: el coach y el clasificador usan Ollama en este equipo.\n"
         "- **Las opciones técnicas** (proveedor e interruptores de prueba) están en la barra lateral, plegada."
     )
     panel_borrar()
+
+
+# ---------------------------------------------------------------- modo sin internet (tarea J6)
+
+# OFFLINE_MODE en .env (o en el entorno) fija el modo local: el interruptor sale encendido y no se puede apagar.
+SIN_INTERNET_FIJO = ventanas.sin_internet_en(proveedor.leer_env())
+
+
+def _cambiar_sin_internet() -> None:
+    """Guarda la elección y, si hay una sesión en curso, se la pasa al monitor, que la aplica en su próximo latido."""
+    activo = bool(st.session_state.sin_internet)
+    guardar_preferencias(sin_internet=activo)
+    with _bd() as con:
+        fila = vivo.sesion_en_curso(con)
+        if fila is not None:
+            vivo.pedir_sin_internet(con, fila["id"], activo)
+    st.session_state.aviso_sesion = (
+        "Ajustes: modo sin internet encendido. Nada sale del equipo: el coach y el clasificador usan Ollama."
+        if activo else "Ajustes: modo sin internet apagado. El coach y el clasificador vuelven a la nube.")
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def ollama_responde() -> bool:
+    """Si Ollama está abierto en este equipo. Se revisa cada 15 s como mucho, para no frenar la página."""
+    try:
+        with urllib.request.urlopen(URL_OLLAMA, timeout=OLLAMA_ESPERA_S) as r:
+            return r.status == 200
+    except OSError:
+        return False
+
+
+sin_internet = SIN_INTERNET_FIJO or bool(st.session_state.get("sin_internet", cargar_preferencias()["sin_internet"]))
 
 
 # ---------------------------------------------------------------- barra lateral: solo lo técnico, plegada
@@ -610,7 +742,7 @@ with st.sidebar:
     tecnicas = st.expander("Opciones técnicas: proveedor e interruptores de prueba", icon=":material/build:")
     tecnicas.caption("Proveedor activo")
     try:
-        configurados = proveedor.perfiles_configurados()
+        configurados = proveedor.perfiles_configurados(ventanas.entorno_llm(sin_internet))
     except proveedor.ErrorConfiguracion as e:
         configurados = []
         st.error(str(e))
@@ -619,7 +751,7 @@ with st.sidebar:
         etiqueta = tecnicas.selectbox(
             "Proveedor y modelo",
             [p.etiqueta for p in opciones],
-            key="proveedor_activo",
+            key="proveedor_local" if sin_internet else "proveedor_activo",  # cada modo recuerda su elección
             help="Cambia en vivo: se usa desde la próxima pregunta.",
         )
         perfiles = cadena(opciones, configurados, etiqueta)
@@ -638,7 +770,29 @@ with st.sidebar:
 
 # ---------------------------------------------------------------- encabezado y pestañas
 
-st.title("BioFocus")
+# Lo único que el tema (.streamlit/config.toml) no alcanza: la letra de las pestañas, más grande (tarea J4).
+st.html("""<style>
+[data-testid="stTab"] { padding: 0.55rem 0.85rem; }
+[data-testid="stTab"] p { font-size: 1.12rem; font-weight: 600; }
+</style>""")
+encabezado, interruptor = st.columns([3, 1], vertical_alignment="center")
+with encabezado:
+    st.title("BioFocus", anchor=False)
+    st.caption("Tu postura, tu foco y tus pausas mientras estudias frente al computador.")
+interruptor.toggle(
+    "Modo sin internet", value=sin_internet, key="sin_internet", disabled=SIN_INTERNET_FIJO,
+    on_change=_cambiar_sin_internet,
+    help="Para sesiones con datos sensibles en pantalla. Encendido, el coach y el clasificador de ventanas usan Ollama "
+         "en este equipo y nada sale: ni títulos, ni tu meta, ni lo que escribes al coach. Vale al instante, también "
+         "con la sesión en curso. " + ("Lo fija OFFLINE_MODE en .env." if SIN_INTERNET_FIJO else ""))
+if sin_internet:
+    if ollama_responde():
+        st.info("Modo sin internet: nada sale del equipo. El coach tarda unos 15 s por pregunta (la primera, más).",
+                icon=":material/shield_lock:")
+    else:
+        st.warning("Nada sale del equipo igual: el coach no podrá contestar y los títulos que no están en las reglas "
+                   "quedan sin clasificar. Abre Ollama para usarlos.", title="Modo sin internet, pero Ollama no responde",
+                   icon=":material/cloud_off:")
 if "aviso_sesion" in st.session_state:
     aviso = st.session_state.pop("aviso_sesion")
     bien = aviso.startswith(("Sesión", "Ajustes")) or (aviso.startswith("Datos:") and "No pude" not in aviso)
@@ -651,7 +805,7 @@ with _bd() as con:
 st.session_state.habia_sesion = en_curso is not None
 
 # Con on_change="rerun" solo corre la pestaña abierta, y la elegida se mantiene tras cada pregunta al coach.
-sesion, coach, registros, ajustes = st.tabs(list(PESTANAS.values()), key="pestana", on_change="rerun")
+sesion, ultima, coach, registros, ajustes = st.tabs(list(PESTANAS.values()), key="pestana", on_change="rerun")
 
 with sesion:
     if sesion.open is not False:
@@ -660,6 +814,10 @@ with sesion:
         else:
             formulario_inicio()
         st.fragment(panel_en_vivo, run_every=2 if en_curso is not None else None)()
+
+with ultima:
+    if ultima.open:
+        panel_ultima_sesion()
 
 with registros:
     if registros.open:
@@ -731,9 +889,11 @@ with coach:
     if coach.open:
         st.caption(
             f"Hoy es {datetime.now():%Y-%m-%d}. Responde con los datos de tus sesiones y muestra de dónde sale cada cifra. "
-            "Al proveedor de IA el coach solo manda cifras agregadas, nombres de app y categorías. El monitor, aparte, "
-            "manda a Groq los títulos de ventana ambiguos y no privados, con la meta, para clasificarlos. "
-            "Nunca salen imágenes ni audio. Lo que escribes aquí sí sale del equipo."
+            + ("Modo sin internet: el coach usa Ollama en este equipo y nada sale, ni lo que escribes aquí."
+               if sin_internet else
+               "Al proveedor de IA el coach solo manda cifras agregadas, nombres de app y categorías. El monitor, aparte, "
+               "manda a Groq los títulos de ventana ambiguos y no privados, con la meta, para clasificarlos. "
+               "Nunca salen imágenes ni audio. Lo que escribes aquí sí sale del equipo.")
         )
         activos = [
             nombre
