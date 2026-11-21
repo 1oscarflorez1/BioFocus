@@ -2,7 +2,7 @@
 
 BioFocus es un monitor personal de salud, foco y espacio de trabajo para sesiones de estudio frente al computador. Tiene dos partes:
 
-- **Monitor en vivo:** durante una sesión real lee la cámara (postura con MediaPipe) y la ventana activa, avisa en el momento con un cartel grande y un sonido, y guarda los eventos en SQLite. La app muestra un panel que se actualiza solo.
+- **Monitor en vivo:** durante una sesión real lee la cámara (postura con MediaPipe) y la ventana activa, avisa en el momento con una ventanita encima de todo y un sonido, y guarda los eventos en SQLite. La app muestra un panel que se actualiza solo y tus registros con filtros.
 - **Coach:** un agente que responde preguntas sobre tus sesiones con herramientas propias sobre esos eventos. Por ejemplo:
   - "¿Cómo va mi sesión?"
   - "¿A qué hora me distraigo más?"
@@ -93,29 +93,29 @@ Crea `data/biofocus.sqlite` con 7 días de sesiones sintéticas que terminan aye
 
 Abre http://localhost:8501. La app solo escucha en tu equipo. También se abre con doble clic en `BioFocus.bat`, en la raíz del repositorio.
 
-La app recuerda la duración, el modo y la imagen de la última sesión (`data/preferencias.json`, sin la meta). La primera vez propone 50 min con tiempos normales.
+La app recuerda la duración, el modo, la imagen, si quieres ver la cámara y la sensibilidad (`data/preferencias.json`, sin la meta). La primera vez propone 50 min con tiempos normales y la cámara oculta.
 
-- **Empezar sesión de estudio:**
+La app tiene cuatro pestañas arriba:
+- **Sesión:**
   1. Escribe la meta.
-  2. Elige la duración, el modo demo (tiempos cortos) y la imagen: la cámara, o un video de `grabaciones/` como plan B.
-  3. Presiona «Empezar sesión de estudio». La app lanza el monitor como proceso aparte y se abre la ventana «BioFocus monitor», siempre encima de las demás.
-- **Panel en vivo:** se actualiza cada 2 s mientras hay una sesión. Muestra:
-  - la meta y el tiempo;
-  - la ventana actual y su categoría;
-  - la postura frente a tu línea base;
-  - la última alerta, destacada;
-  - los minutos por categoría;
-  - una línea de tiempo con las ventanas y las alertas.
-- **Terminar sesión:** le pide al monitor que cierre. También se cierra con `q` en la ventana del monitor.
-- **Chat:** escribe una pregunta o usa uno de los ejemplos.
-- **Fuente y criterio:** qué herramienta se usó, con qué fechas y cómo se calculó, en lenguaje humano.
-- **Traza técnica:** desplegable con cada paso en orden y su duración (llamadas al modelo, herramientas, reintentos, cambios de proveedor, validaciones).
-- **Aprobar y Rechazar:** si pides algo como "marca WhatsApp como no sirve", el coach propone la regla y solo se guarda en `data/reglas.json` si la apruebas.
-- **¿Sobre qué datos pregunto?:** encima del chat eliges «Mis sesiones reales» o «Semana de datos demo». El coach solo consulta esos datos: las dos cosas nunca se suman. «¿Cómo va mi sesión?» siempre mira la sesión real.
-- **Barra lateral:**
-  - «Opciones técnicas» (plegadas): proveedor activo, que se cambia en vivo, e interruptores de prueba;
-  - por separado, las **sesiones reales** (con los totales de hoy y de los últimos 7 días: sesiones, minutos, alertas y pausas) y la **semana de datos demo**;
-  - **Borrar mis datos:** sesiones reales, semana demo, trazas del coach, reglas aprobadas o el registro del monitor. Hay que escribir BORRAR, y no se puede deshacer.
+  2. Elige la duración, la imagen (la cámara, o un video de `grabaciones/` como plan B), si quieres ver la imagen de la cámara y el modo demo (tiempos cortos).
+  3. Presiona «Empezar sesión de estudio». La app lanza el monitor como proceso aparte. Con «Ver la imagen de la cámara» apagado, la cámara trabaja escondida.
+  - **Avisos:** cada alerta de postura, de distracción y cada recordatorio de pausa sale en una ventanita encima de todo, abajo a la derecha, con un sonido. No te quita el teclado y se cierra sola en 8 s (o con un clic). Al cumplirse el tiempo planeado te avisa que la cámara sigue encendida, y lo repite cada 10 min.
+  - **Terminar sesión** y **Recalibrar postura:** botones arriba del panel. Para recalibrar, siéntate derecho unos 5 s.
+  - **Panel en vivo:** se actualiza cada 2 s. Muestra la meta y el tiempo, la ventana actual y su categoría, la postura frente a tu línea base, la última alerta destacada, los minutos por categoría y una línea de tiempo con las ventanas y las alertas.
+- **Coach:**
+  - **¿Sobre qué datos pregunto?:** «Mis sesiones reales» o «Semana de datos demo». El coach solo consulta esos datos: las dos cosas nunca se suman. «¿Cómo va mi sesión?» siempre mira la sesión real.
+  - **Chat:** escribe una pregunta o usa uno de los ejemplos.
+  - **Fuente y criterio:** qué herramienta se usó, con qué fechas y cómo se calculó, en lenguaje humano.
+  - **Traza técnica:** desplegable con cada paso en orden y su duración (llamadas al modelo, herramientas, reintentos, cambios de proveedor, validaciones).
+  - **Aprobar y Rechazar:** si pides algo como "marca WhatsApp como no sirve", el coach propone la regla y solo se guarda en `data/reglas.json` si la apruebas.
+- **Mis registros:** tus sesiones listadas, con filtros por origen (reales o demo) y por fechas. Muestra sesiones, minutos, alertas y pausas, los minutos por categoría, las alertas por día y la línea de tiempo de la sesión que elijas.
+- **Ajustes:**
+  - **Sensibilidad de las alertas:** cuánto puede bajar tu cabeza antes de avisar (20 a 40 %), los segundos de mala postura, los segundos en algo que no sirve y cada cuánto recordar la pausa. Se usa desde la próxima sesión, en modo normal; el modo demo usa siempre sus tiempos cortos.
+  - **Tus datos:** qué sale del equipo, y **Borrar mis datos** (sesiones reales, semana demo, trazas del coach, reglas aprobadas o el registro del monitor). Hay que escribir BORRAR, y no se puede deshacer.
+- **Barra lateral (plegada):** «Opciones técnicas», con el proveedor activo, que se cambia en vivo, y los interruptores de prueba.
+
+Para probar la app entera sin tocar tus datos, apúntala a otra base con `$env:BIOFOCUS_BD="$env:TEMP\prueba.sqlite"` antes de abrirla.
 
 ## Sesión en vivo desde la terminal
 Si lanzar el monitor desde la app da problemas, inícialo desde la terminal; la app lo muestra igual (recarga la página):
@@ -126,6 +126,7 @@ Si lanzar el monitor desde la app da problemas, inícialo desde la terminal; la 
 .venv\Scripts\python producto\monitor.py --meta "Repasar integración por partes" --modo-demo --video grabaciones\encorvado.mp4
 ```
 
+- **Cámara oculta y sensibilidad:** `--ocultar-camara` trabaja sin la ventana de la cámara (los avisos salen igual); `--caida-postura 30`, `--postura-s`, `--distraccion-s` y `--pausa-cada-min` cambian la sensibilidad dentro de sus topes (no aplican en modo demo).
 - **Teclas** en la ventana de la cámara: `c` recalibra y `q` termina. También termina al cerrar esa ventana, con «Terminar sesión» en la app o con Ctrl+C. En todos los casos escribe `fin_sesion` y cierra limpio.
 - **Calibración:** los primeros 5 s, sentado derecho y con los hombros a la vista. Se descarta el primer segundo.
 - **Postura:** el número es (y medio de los hombros − y de la nariz) / ancho de los hombros. Hay alerta si cae más de 25 % bajo tu línea base durante 20 s. Se rearma al volver a −10 % o tras 10 s seguidos en «bien». Si no ve nariz y hombros, dice «no te veo» y no alerta.
@@ -146,7 +147,7 @@ Si lanzar el monitor desde la app da problemas, inícialo desde la terminal; la 
 `--video` es el plan B sin cámara: lee el video una vez, a su ritmo, y al terminar cierra la sesión; la ventana activa se sigue leyendo en vivo. La sesión queda como real (`es_demo = 0`) aunque uses `--modo-demo`. Para probar sin ventana ni sonido: `--sin-ventana`. Para ver cada segundo el número de postura, la base y el estado: `--detalle`.
 
 ## Prueba de 3 minutos (modo demo)
-En la app: meta «Repasar integración por partes», duración 3, modo demo encendido e imagen «Cámara» (la app los recuerda para la próxima vez). Presiona «Empezar sesión de estudio». Pon la ventana «BioFocus monitor» en una esquina, donde no tape lo que vas a mostrar.
+En la app: meta «Repasar integración por partes», duración 3, modo demo encendido e imagen «Cámara» (la app los recuerda para la próxima vez). Enciende «Ver la imagen de la cámara» si quieres mostrar el esqueleto, y presiona «Empezar sesión de estudio». Pon la ventana «BioFocus monitor» en una esquina, donde no tape lo que vas a mostrar. Los avisos salen igual abajo a la derecha.
 
 | Minuto | Qué hacer | Qué debe pasar |
 |---|---|---|
@@ -221,7 +222,8 @@ El primer comando muestra la respuesta esperada de cada uno de los 12 casos de `
 | `producto/proveedor.py` | `llamar_llm`: API compatible con OpenAI con urllib, reintentos y respaldo |
 | `producto/agente.py` | El bucle del agente, sus límites y la consola |
 | `producto/trazas.py` | Spans con duración en ms y archivo `traces/AAAA-MM-DD.jsonl` |
-| `producto/app.py` | La app de Streamlit |
+| `producto/app.py` | La app de Streamlit, en pestañas: Sesión, Coach, Mis registros y Ajustes |
+| `producto/aviso.py` | El aviso emergente que abre el monitor en cada alerta (Tkinter, encima de todo) |
 | `producto/verificar_modelos.py` | Prueba qué modelos del proveedor sirven con herramientas |
 | `docs/PLAN-M2.md` | Plan del Momento 2 con su criterio de sí o no |
 | `docs/decisiones/m2-decisiones.md` | Decisiones del Momento 2 y la renegociación del LLM en la nube |

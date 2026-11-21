@@ -8,11 +8,13 @@ para que no haya dónde poner un título.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
-RUTA_BD = RAIZ / "data" / "biofocus.sqlite"
+# BIOFOCUS_BD apunta la app y el monitor a otra base: sirve para probar la app entera sin tocar data/ real.
+RUTA_BD = Path(os.environ.get("BIOFOCUS_BD") or RAIZ / "data" / "biofocus.sqlite")
 
 TIPOS_EVENTO = (
     "inicio_sesion",
@@ -63,9 +65,23 @@ CREATE TABLE IF NOT EXISTS estado_monitor (
     app TEXT,                              -- app de la ventana actual, nunca el título
     categoria TEXT CHECK (categoria IS NULL OR categoria IN ({_lista_sql(CATEGORIAS)})),
     ventana_desde TEXT,                    -- desde cuándo está en esa ventana
-    detener INTEGER NOT NULL DEFAULT 0 CHECK (detener IN (0, 1))  -- la app pide terminar la sesión
+    detener INTEGER NOT NULL DEFAULT 0 CHECK (detener IN (0, 1)),  -- la app pide terminar la sesión
+    recalibrar INTEGER NOT NULL DEFAULT 0 CHECK (recalibrar IN (0, 1))  -- la app pide recalibrar la postura
 );
 """
+# Columnas que se sumaron después de crear la tabla: una base vieja las recibe al conectar.
+COLUMNAS_NUEVAS = {
+    "estado_monitor": {"recalibrar": "INTEGER NOT NULL DEFAULT 0 CHECK (recalibrar IN (0, 1))"},
+}
+
+
+def _migrar(con: sqlite3.Connection) -> None:
+    for tabla, columnas in COLUMNAS_NUEVAS.items():
+        existentes = {f["name"] for f in con.execute(f"PRAGMA table_info({tabla})")}
+        for nombre, definicion in columnas.items():
+            if nombre not in existentes:
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN {nombre} {definicion}")
+    con.commit()
 FORMATO = "%Y-%m-%d %H:%M:%S"
 
 
@@ -82,6 +98,7 @@ def conectar(ruta: str | Path | None = None) -> sqlite3.Connection:
     con.execute("PRAGMA busy_timeout = 10000")
     con.execute("PRAGMA foreign_keys = ON")
     con.executescript(ESQUEMA)
+    _migrar(con)
     return con
 
 

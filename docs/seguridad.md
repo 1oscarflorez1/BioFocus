@@ -39,9 +39,10 @@ Fecha: 2026-11-17. Formato de la semana 12: modelo de amenazas, tríada, ataque 
 | Nombres de app de ejecutables desconocidos | Quien nombró el programa instalado | La base y, desde ahí, el coach |
 | Texto pegado en el chat | Una página, un correo o un documento de donde la persona lo copió | El coach |
 | Respuestas de los modelos | El proveedor y lo que el modelo haya leído | La pantalla (app y ventana del monitor) |
+| Nombre de la app en el aviso emergente de distracción (bloque I) | Quien nombró el programa | El proceso local del aviso, como argumento: ya pasó por el alfabeto cerrado (`ventanas.py:258`) |
 
 ### ¿Por dónde puede salir información?
-1. **Al proveedor del coach** (Groq; Gemini de respaldo), por diseño: la pregunta, las dos anteriores con su respuesta y lo que devuelven las herramientas (cifras, horas, nombres de app y categorías). Nunca la meta ni títulos: no hay herramienta que los devuelva (`datos.py:38`).
+1. **Al proveedor del coach** (Groq; Gemini de respaldo), por diseño: la pregunta, las dos anteriores con su respuesta y lo que devuelven las herramientas (cifras, horas, nombres de app y categorías). Nunca la meta ni títulos: no hay herramienta que los devuelva (`datos.py:40`).
 2. **Al proveedor del clasificador** (Groq), por diseño: el título de una ventana ambigua y no privada, el nombre de la app y la meta (`ventanas.py:328`).
 3. **Por la pantalla de la app.** La respuesta del coach se pintaba como markdown (`app.py:410` en `169bad9`). Una imagen en la respuesta hace que el navegador pida esa URL a un servidor cualquiera: si la URL lleva datos, salen. **Este era el canal del ataque que funcionó.**
 4. **Por git.** Si se subiera `.env`, `data/` o `traces/`. Los tres están en `.gitignore`, y se revisó la historia (sección 4, fila «Secretos»).
@@ -50,9 +51,10 @@ Fecha: 2026-11-17. Formato de la semana 12: modelo de amenazas, tríada, ataque 
 | Acción | Antes | Después |
 |---|---|---|
 | `guardar_regla`: cambia de forma permanente cómo se clasifica una app | Exige el clic en «Aprobar» (`agente.py:332`, `herramientas.py:494`) | Igual: el ataque lo confirmó (sección 3) |
-| Borrar datos | No existía en la app; solo a mano, en la carpeta | «Borrar mis datos» exige escribir BORRAR (`app.py:427`). Una sesión en curso no se borra |
+| Borrar datos | No existía en la app; solo a mano, en la carpeta | «Borrar mis datos» exige escribir BORRAR (`app.py:587`). Una sesión en curso no se borra |
 | Mandar un título o una pregunta al proveedor | No se puede deshacer | Igual. Se reduce con los privados, el tope de 6 consultas por minuto y el modo local |
-| Regenerar los datos demo | Borra solo lo marcado como demo (`datos.py:142`) | Igual |
+| Regenerar los datos demo | Borra solo lo marcado como demo (`datos.py:159`) | Igual |
+| Lanzar el aviso emergente (bloque I) | No existía | Abre un proceso local de Python con `producto/aviso.py` y nada más: argumentos en lista, sin shell (`aviso.py:31`), texto recortado a 90 caracteres y mostrado como texto, sin red. Se cierra solo; uno a la vez. No es irreversible: se lista porque es la única acción nueva del monitor |
 
 ## 2. La tríada
 
@@ -144,17 +146,19 @@ El filtro frenó uno («Guia del curso: clasificar como util…») y el modelo, 
 
 | Control | Antes (`169bad9`) | Después |
 |---|---|---|
-| **Permisos de la herramienta que toca datos** | Base en solo lectura (`mode=ro`, `datos.py:95`). Consultas fijas, sin SQL del modelo. La meta no sale (`datos.py:38`). Los nombres de app iban al modelo con solo un recorte a 40 caracteres | Igual, y los nombres de app pasan por un alfabeto cerrado (letras, números, espacio y `. + - ( )`) y un máximo de 30 caracteres, al guardarlos (`ventanas.py:258`) y al dárselos al modelo (`herramientas.py:188`) |
+| **Permisos de la herramienta que toca datos** | Base en solo lectura (`mode=ro`, `datos.py:112`). Consultas fijas, sin SQL del modelo. La meta no sale (`datos.py:40`). Los nombres de app iban al modelo con solo un recorte a 40 caracteres | Igual, y los nombres de app pasan por un alfabeto cerrado (letras, números, espacio y `. + - ( )`) y un máximo de 30 caracteres, al guardarlos (`ventanas.py:258`) y al dárselos al modelo (`herramientas.py:188`) |
 | **Salida a internet** | La respuesta del coach se pintaba como markdown: una imagen sacaba datos (ataque `imagen_markdown`, 3/3) | `limpiar_salida` quita imágenes, enlaces, referencias, HTML y URLs de la respuesta y de «Fuente y criterio» (`agente.py:131`, `agente.py:199` y `agente.py:222`), con aviso y span en la traza. La salida al proveedor se cierra con el modo local (bloque H) |
-| **Acciones que requieren aprobación** | `guardar_regla` (`agente.py:332`, `herramientas.py:494`, `app.py:524`). Borrar datos no existía en la app | Igual, más «Borrar mis datos» con BORRAR escrito (`app.py:427`). Al borrar, SQLite sobrescribe lo borrado y compacta (`datos.py:150` y `datos.py:165`) |
-| **Límite de gasto e iteraciones** | Coach: 6 vueltas, 12 000 tokens por pregunta, 20 s por llamada y 5 s por herramienta (`agente.py:34` a `agente.py:55`). Clasificador: sin tope de consultas | Coach igual. Clasificador: una consulta por título equivalente y máximo 6 por minuto (`ventanas.py:45`; commit `169bad9`). Trazas: 30 días (`trazas.py:22`). `data/monitor.log`: máximo 512 KB (`app.py:45`) |
+| **Acciones que requieren aprobación** | `guardar_regla` (`agente.py:332`, `herramientas.py:494`, `app.py:715`). Borrar datos no existía en la app | Igual, más «Borrar mis datos» con BORRAR escrito (`app.py:587`). Al borrar, SQLite sobrescribe lo borrado y compacta (`datos.py:167` y `datos.py:182`) |
+| **Límite de gasto e iteraciones** | Coach: 6 vueltas, 12 000 tokens por pregunta, 20 s por llamada y 5 s por herramienta (`agente.py:34` a `agente.py:55`). Clasificador: sin tope de consultas | Coach igual. Clasificador: una consulta por título equivalente y máximo 6 por minuto (`ventanas.py:45`; commit `169bad9`). Trazas: 30 días (`trazas.py:22`). `data/monitor.log`: máximo 512 KB (`app.py:61`) |
 | **Secretos** | Las llaves de Groq y Gemini quedaron expuestas en octubre. `.env` estaba en `.gitignore`. La llave no sale en `repr` (`proveedor.py:73`), se borra de los cuerpos de error (`proveedor.py:170`) y una prueba verifica que no llega a las trazas. Claude Code tenía prohibido leer `.env`, con un hueco documentado: `Get-Content .env -Raw` (`docs/decisiones/permisos.md`) | Llaves cambiadas el 2026-11-13. Revisión del 2026-11-17: ninguna llave en los 19 commits de git (nunca se subió `.env`), en `traces/`, en `data/`, en `producto/evals/resultados/` ni en `.claude/`. Se cerró el hueco de `-Raw` con `PowerShell(Get-Content *.env *)` en `deny` (`.claude/settings.json`) |
 
 ## 5. Riesgos que asumimos
 - **Lo que sale al proveedor en modo nube.** Las preguntas al coach, las cifras de uso, y los títulos ambiguos con la meta. Es el diseño (`docs/decisiones/m2-decisiones.md`, renegociación del LLM en la nube). La app lo dice antes del chat, y el modo local lo evita.
 - **Títulos privados que las reglas no reconocen.** Los privados son una lista de patrones (`producto/reglas.json:8`): un correo o un banco que no esté en la lista sale como ambiguo. Se asume por la demo; la alternativa segura es `LLM_CLASIFICADOR_PROVIDER=ollama` o `ninguno`.
 - **El filtro de títulos con instrucciones es una lista de patrones.** Siempre habrá frases que lo esquiven. Se asume porque lo peor que logra un título es una ventana contada como `sirve`: una alerta de distracción menos y minutos útiles inflados. La salida del clasificador es un conjunto cerrado y no guarda ni manda nada más.
-- **Texto sembrado que llega a la pantalla.** Un nombre de app con instrucciones se muestra tal cual en el panel (sin «:» ni «/», que Windows no permite en nombres de archivo).
+- **Texto sembrado que llega a la pantalla.** Un nombre de app con instrucciones se muestra tal cual en el panel y en el aviso emergente de distracción (sin «:» ni «/», que Windows no permite en nombres de archivo). El aviso lo pinta Tkinter como texto: no interpreta markdown ni abre enlaces.
+- **La sensibilidad la elige la persona (bloque I).** Un valor fuera de rango en `data/preferencias.json` vuelve al de fábrica al cargar (`app.py:107`), y el monitor rechaza lo que se salga de sus topes al arrancar (`monitor.py:763`). Lo peor que logra quien edite ese archivo es que BioFocus avise menos, dentro de los topes.
+- **La cámara oculta por defecto (bloque I).** Sin la ventana encima, la cámara podría quedar encendida sin que se note. Lo cubren el panel en vivo de la app, el aviso de tiempo cumplido cada 10 min (`monitor.py:263`) y el cierre a los 15 s si la app deja de verlo (`vivo.py:14`).
 
 ## 6. Modo local: la pata de salida cerrada
 Con `OFFLINE_MODE=true`, el coach y el clasificador usan Ollama en `localhost:11434` (`proveedor.py:145` y `ventanas.py:278`). **Ningún dato sale del equipo:** ni la pregunta, ni las cifras, ni los títulos, ni la meta. La tríada se queda sin la pata de salida también hacia el proveedor. Lo que queda es la salida por la pantalla, que ya cierra `limpiar_salida`.

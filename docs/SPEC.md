@@ -1,6 +1,6 @@
 # Spec · BioFocus
 
-Fecha: 2026-11-17. Versión final para el Momento 3.
+Fecha: 2026-11-17. Versión final para el Momento 3, revisada el 2026-11-20 con el bloque I (lo que salió de la prueba con una persona ajena).
 
 **De dónde sale.** No hubo un documento de spec aparte en la semana 4. Lo declarado es la propuesta del Momento 1 más las specs por incremento que están en el repositorio, y esta spec las toma como línea base:
 - `docs/decisiones/exploracion.md`: decisiones, alcance mínimo y fuera de alcance del Momento 1;
@@ -16,7 +16,7 @@ Lo que cambió frente a lo declarado está en la tabla de renegociación (secci�
 BioFocus es un monitor personal de salud, foco y espacio de trabajo para sesiones de estudio frente al computador. Durante una sesión con una meta escrita:
 - lee la cámara (postura, con MediaPipe en el equipo);
 - lee la ventana activa (¿sirve a la meta?);
-- avisa en el momento con un cartel y un sonido;
+- avisa en el momento con un aviso emergente encima de todo y un sonido (y con el cartel en la imagen de la cámara, si la persona elige verla);
 - guarda eventos, nunca imágenes ni títulos.
 
 Un coach responde preguntas sobre las sesiones con herramientas que consultan esos eventos, y muestra de dónde sale cada cifra.
@@ -28,8 +28,8 @@ Los de la propuesta inicial, con su estado al 2026-11-17:
 |---|---|---|
 | Detectar, alertar y registrar malas posturas durante la sesión | Cumplido | `monitor.py`, clase `Postura`; experimento 01 |
 | Registrar y alertar cuando el trabajo se va a páginas o apps que no sirven a la meta | Cumplido | `ventanas.py` y `monitor.py`, clase `Distraccion` |
-| Autoconciencia con alertas en vivo | Cumplido | Ventana «BioFocus monitor» y panel de la app |
-| Informes y dashboards posteriores, diarios y semanales | Parcial: panel de la sesión, sesiones reales y coach con preguntas por fechas. El resumen al cerrar es la tarea B7 | `app.py`; `herramientas.py` |
+| Autoconciencia con alertas en vivo | Cumplido | Aviso emergente (`producto/aviso.py`), pestaña «Sesión» de la app y, si se elige, la ventana «BioFocus monitor» |
+| Informes y dashboards posteriores, diarios y semanales | Cumplido: pestaña «Mis registros» con filtros por origen y fechas, cifras, minutos por categoría, alertas por día, la lista de sesiones y la línea de tiempo de cada una (bloque I); panel de la sesión; coach con preguntas por fechas | `app.py`, `panel_registros`; `vivo.py`, `registros`; `herramientas.py` |
 | Recomendar pausas activas y cómo hacerlas | Cumplido con catálogo fijo y conservador. El recordatorio por tiempo es la tarea B4 | `catalogo_pausas.json`; `pausas_recomendadas` |
 | Ver si la persona mira el celular u otro lado | Parcial: mirar el celular baja el número de postura (experimento con `distraido.mp4`), pero no hay detector propio | `m2-decisiones.md`, prueba con los tres videos |
 | Cámara lateral del celular para más datos | Renegociado: el experimento 02 no cumplió el criterio y no se integra | Sección 7; `docs/decisiones/experimento-02.md` |
@@ -54,7 +54,8 @@ ventana activa ──► reglas (privado, neutro, distracción, reglas aprobadas
                                                                                         ▼
                                               data/biofocus.sqlite (sesiones y eventos, sin títulos)
                                                                                         ▼
-app Streamlit (localhost) ──► panel en vivo, sesiones reales, «Borrar mis datos»
+alertas ──► aviso emergente (producto/aviso.py, Tkinter, encima de todo) y sonido
+app Streamlit (localhost), en pestañas ──► Sesión (en vivo, recalibrar), Mis registros, Ajustes (sensibilidad, «Borrar mis datos»)
           └─► coach: LLM (Groq, Gemini u Ollama) ⇄ 7 herramientas validadas (solo lectura; guardar_regla con aprobación)
 ```
 
@@ -62,6 +63,8 @@ app Streamlit (localhost) ──► panel en vivo, sesiones reales, «Borrar mis
 - El monitor (`producto/monitor.py`) corre aparte, lanzado por la app o desde la terminal.
 - La app (`producto/app.py`) lee la base en modo WAL mientras el monitor escribe.
 - El coach (`producto/agente.py`) corre dentro de la app.
+- El aviso emergente (`producto/aviso.py`) es un proceso corto que el monitor abre en cada alerta y que se cierra solo.
+- La app le pasa al monitor la sensibilidad elegida y si se ve la cámara; le pide recalibrar o terminar por la tabla `estado_monitor`.
 
 **Datos.** Tres tablas (`producto/datos.py`):
 - `sesiones`: inicio, fin, meta, duración planeada y si es demo;
@@ -89,6 +92,9 @@ Ninguna tiene dónde guardar un título.
 | La cámara tarda en arrancar o se corta | Espera hasta 10 s y la reabre una vez; si no vuelve, cierra la sesión con su motivo | `monitor.py`, `CorteCamara` |
 | El monitor se cae o el equipo se apaga | A los 15 s sin señales la sesión se cierra en su último latido, con el tramo de ventana en curso | `vivo.py`, `cerrar_sin_monitor` |
 | Dos sesiones a la vez | No se permite | `monitor.py`, `Registro` |
+| La ventana de la cámara queda detrás u oculta | El aviso sale igual, encima de todo y sin robar el teclado | `producto/aviso.py` |
+| Se cumple el tiempo planeado | Aviso «la cámara sigue encendida» y se repite cada 10 min; la sesión no se termina sola | `monitor.py`, `FinDelPlan` |
+| Sensibilidad fuera de sus topes en `data/preferencias.json` | Vuelve al valor de fábrica; el monitor rechaza lo que se salga | `app.py`, `cargar_preferencias`; `monitor.py`, `_entero_entre` |
 | Título privado (banca, correo, contraseñas, salud, navegación privada) | «Privado», sin clasificar; no sale ni se guarda | `producto/reglas.json` |
 | Título que cambia en cada lectura | Cuenta por proceso a los 5 s; una consulta por título equivalente | `ventanas.py`, `SeguidorVentanas` |
 | Título con instrucciones para el clasificador | `no_sirve`, sin ir al modelo; nunca sale como `sirve` | `ventanas.py`, `parece_instruccion` |
@@ -103,7 +109,7 @@ Cada tarea tiene su pregunta de sí o no en su plan (`docs/PLAN-M2.md` y `docs/P
 - Con `grabaciones\derecho.mp4` no hay alertas, y con `encorvado.mp4` hay una alerta de postura (`docs/decisiones/m2-decisiones.md`).
 - La suite del coach, 12 casos × 3 corridas, se compara contra la línea base de la semana 10: 36/36, 0,000603 USD por tarea, mediana de 1 352 ms, p90 de 2 191 ms y 27/27 de recuperación. Resultado final en `docs/decisiones/semana14.md`.
 - Los ataques de `producto/evals/ataques.py` no sacan datos ni escriben sin aprobación (`docs/seguridad.md`).
-- Una persona ajena usa la app sin ayuda (`docs/decisiones/prueba-companero.md`).
+- Una persona ajena usa la app sin ayuda (`docs/decisiones/prueba-companero.md`). La primera prueba (`prueba-companero-2026-11-20.md`) lo logró en parte: no vio las alertas ni encontró sus registros, y eso se arregló en el bloque I.
 
 ## 7. Decisiones y renegociación
 Registro vivo de decisiones:
@@ -115,7 +121,7 @@ Registro vivo de decisiones:
 |---|---|---|
 | LLM solo local (Ollama), por privacidad (`exploracion.md`) | LLM en la nube (Groq, Gemini de respaldo) para el coach y el clasificador; Ollama como modo sin internet (bloque H) | Este equipo no tenía Ollama y la capa gratuita en la nube respondió en 1 a 3 s con llamadas a herramientas. Se renegoció con condiciones escritas: qué sale y qué nunca sale (`m2-decisiones.md`) |
 | Ningún título sale del equipo | Los títulos ambiguos y no privados van a Groq con la meta | Sin eso, lo ambiguo no se puede clasificar frente a la meta. Los privados nunca salen; `LLM_CLASIFICADOR_PROVIDER=ollama` o `ninguno` lo apagan |
-| Interfaz Tkinter y notificaciones de Windows | Ventana de OpenCV con cartel y sonido, y app Streamlit | El cartel sobre la imagen de la cámara se ve aunque Windows tenga «No molestar». Streamlit da el chat y los gráficos sin escribir una interfaz |
+| Interfaz Tkinter y notificaciones de Windows | Aviso emergente con Tkinter, app Streamlit en pestañas y la ventana de OpenCV como opción | En el Momento 2 se eligió el cartel sobre la imagen de la cámara, porque se ve aunque Windows tenga «No molestar». La prueba con una persona ajena (2026-11-20) mostró que esa ventana queda detrás y nadie ve la alerta. Se volvió a lo declarado con Tkinter (bloque I): se ve encima de todo y, a diferencia de una notificación de Windows, también con «No molestar» |
 | Cámara lateral del celular, «más datos y medidas más certeras» | Experimento 02 (G1) con tres videos laterales grabados con el celular; no se integra | Con estos videos no separa la postura. El ángulo del cuello sube unos 16° al encorvarse o adelantar la cabeza, pero el ruido dentro de un mismo video es igual de grande (0,9 a 1,0 veces, frente a las 3 del criterio). El del tronco no sirve: la silla tapa la cadera. La frontal separó 9 veces en el experimento 01. Además, la integración en vivo tenía como condición cerrar A, C y D el 2026-11-15, y eso no se cumplió (`docs/decisiones/experimento-02.md`) |
 | Ritmo de tecleo o de lectura | No se hace | Necesita un gancho global de teclado: es la capacidad de un keylogger y contradice los permisos mínimos |
 | Ruido ambiental | No se hace | Abre el micrófono: superficie nueva de privacidad, sin umbrales probados |

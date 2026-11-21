@@ -17,6 +17,8 @@ Desde la raíz, en PowerShell, con Python 3.13. Detalle en README.md.
 - App: `.venv\Scripts\python -m streamlit run producto\app.py` (http://localhost:8501). «Empezar sesión de estudio» lanza el monitor y el panel en vivo se actualiza cada 2 s. El coach pregunta sobre «Mis sesiones reales» o «Semana de datos demo», nunca las dos juntas.
 - Monitor por terminal: `.venv\Scripts\python producto\monitor.py --meta "texto" --duracion 3 --modo-demo` (`--video grabaciones\encorvado.mp4` es el plan B sin cámara; `c` recalibra y `q` termina).
 - Probar el monitor con los videos, sin ventana y sin mandar títulos a Groq: `$env:LLM_CLASIFICADOR_PROVIDER="ninguno"` y luego `.venv\Scripts\python producto\monitor.py --meta "prueba" --modo-demo --video grabaciones\derecho.mp4 --sin-ventana --detalle --bd $env:TEMP\prueba.sqlite`.
+- Probar la app entera sin tocar `data/`: `$env:BIOFOCUS_BD="$env:TEMP\prueba.sqlite"` y `$env:LLM_CLASIFICADOR_PROVIDER="ninguno"` antes de abrirla. Con la cámara oculta (`--ocultar-camara`, lo normal desde la app) los avisos salen en `producto\aviso.py`, encima de todo.
+- Índice de la entrega para quien evalúa: `docs/ENTREGA.md`.
 - Consola: `.venv\Scripts\python producto\agente.py "¿a qué hora me distraigo más?"` (con `--traza` imprime el JSON).
 - Pruebas, sin red ni llaves: `.venv\Scripts\python -m unittest discover -s tests`.
 - Modelos con herramientas: `.venv\Scripts\python producto\verificar_modelos.py`.

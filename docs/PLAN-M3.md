@@ -9,9 +9,10 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
 - B5, B6 y B7: al final, según el orden de corte.
 - G1: aprobado; no toca el código del producto. G2 tenía como condición que G1 pasara y que A, C y D estuvieran cerrados el 2026-11-15. Esa fecha pasó con A sin commit, así que G2 no entra: se renegocia en `docs/SPEC.md` con los números de G1.
 - H (modo sin internet): bloque nuevo, aprobado el 2026-11-17.
+- I (lo que salió de la prueba con el padre del autor): bloque nuevo, aprobado el 2026-11-20 («hagamos mejoras a las visuales: barra de pestañas, mejor accesibilidad, que el panel se esconda y calibrar a gusto desde el panel principal»).
 - Decisiones menores en `docs/decisiones/m3-decisiones.md`.
 
-## Estado al 2026-11-18
+## Estado al 2026-11-20
 | Tarea | Estado | Commit |
 |---|---|---|
 | A1 a A5 | Hecho | `169bad9` |
@@ -26,6 +27,8 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
 | G2 | Renegociado en `docs/SPEC.md` | — |
 | H1 | Hecho: qwen2.5:3b para el clasificador y el coach | `e1546ae` |
 | H2 y H3 | Hecho: 34/36 en local (`docs/decisiones/semana14.md`); el plan B es el modo local | `2026-11-18_0426.json` |
+| I1 a I4 | Hecho el 2026-11-20: aviso emergente, cámara oculta, recalibrar y sensibilidad desde la app, pestañas y «Mis registros». Verificado con `encorvado.mp4`, una base temporal y la vista previa | «Momento 3, bloque I» |
+| I5 | Hecho: SPEC, seguridad, gobernanza, auditoría, guion, prueba, README y `docs/ENTREGA.md` | «Momento 3, bloque I» |
 
 ## Respuestas del 2026-11-17
 1. **Equipo:** trabajo individual, avalado por el docente como excepción por incapacidad. Queda constancia en `docs/SPEC.md`. La sustentación se prepara para una sola persona.
@@ -108,6 +111,15 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
     - El autor graba con la cámara del Honor X8b, de lado y fuera de BioFocus, tres videos: derecho, encorvado y cabeza adelantada. Así no hay que instalar nada.
     - El script mide en cada video el ángulo del cuello (oreja–hombro frente a la vertical), el del tronco (hombro–cadera), su ruido y los cuadros por segundo.
 31. **G2 · No entra antes del 19.** Se renegocia en `docs/SPEC.md` con los números de G1. Usar el celular en vivo pide instalar una app de cámara virtual en el celular y en Windows, y medir que no frene la cámara frontal.
+
+## I · Lo que salió de la prueba con el padre del autor (aprobado el 2026-11-20)
+La prueba (`docs/decisiones/prueba-companero-2026-11-20.md`) mostró que las alertas saltaron y nadie las vio: el aviso solo se pintaba en la ventana de la cámara, que quedó detrás. También buscó sus registros y cómo recalibrar, y no los encontró. El coach (`agente.py`, `herramientas.py`, `proveedor.py`) no se toca, para que las cifras de E2 sigan valiendo.
+
+32. **I1 · Aviso emergente** (`producto/aviso.py`, `monitor.py`). Cada alerta de postura, de distracción y cada recordatorio de pausa abre una ventanita encima de todo, abajo a la derecha, que no roba el teclado y se cierra sola, con el sonido de siempre. Es la «notificación de Windows» de la propuesta inicial, hecha con Tkinter para que se vea aunque Windows tenga «No molestar». ¿Con la cámara oculta y el navegador al frente, `encorvado.mp4` hace salir el aviso y sonar?
+33. **I2 · Cámara oculta y recalibrar desde la app** (`monitor.py`, `vivo.py`, `datos.py`, `app.py`). Interruptor «Ver la imagen de la cámara» (apagado por defecto) y botón «Recalibrar postura» en el panel de la sesión. ¿Se puede empezar, recalibrar y terminar sin tocar la ventana de la cámara?
+34. **I3 · Sensibilidad a gusto** (`monitor.py`, `app.py`). Cuánto puede bajar la cabeza (20 a 40 %), segundos encorvado, segundos en algo que no sirve y cada cuánto recordar la pausa, con topes y su porqué. El modo demo no los usa, para que la demo salga igual siempre. ¿Un cambio en «Ajustes» queda guardado y llega al monitor de la siguiente sesión?
+35. **I4 · Pestañas, registros con filtros y accesibilidad** (`app.py`, `vivo.py`). Pestañas Sesión, Coach, Mis registros y Ajustes; la barra lateral solo con las opciones técnicas, plegada. «Mis registros» lista las sesiones con filtros por origen y fechas, cifras y gráficos. Textos con etiqueta, nombres accesibles en gráficos y tablas, y colores que no son la única señal. ¿Una persona ajena encuentra sus registros y la sensibilidad sin ayuda?
+36. **I5 · Documentos de la entrega al día.** SPEC, seguridad, gobernanza, respuesta a la auditoría, guion, la prueba («Qué cambié»), README y un índice de la entrega (`docs/ENTREGA.md`) que lleva cada entregable de la rúbrica a su archivo. ¿Cada entregable apunta a su evidencia y `verificar_citas.py` da 0 malas?
 
 ## Se renegocia por escrito en `docs/SPEC.md` (no cabe antes del 19)
 | Idea de la propuesta inicial | Por qué no cabe |

@@ -1,16 +1,18 @@
 r"""Monitor de BioFocus: una sesión de estudio real, en vivo, en un proceso aparte.
 
-Lee la cámara (MediaPipe Pose) y la ventana activa, dispara alertas en tiempo real (aviso grande en la
-ventana de la cámara y un sonido corto) y escribe eventos en data/biofocus.sqlite. Nunca graba ni guarda
-imágenes, video ni audio: cada cuadro vive en memoria lo que tarda en procesarse.
+Lee la cámara (MediaPipe Pose) y la ventana activa, dispara alertas en tiempo real (un aviso emergente
+encima de todo, un sonido corto y el cartel en la ventana de la cámara si está a la vista) y escribe eventos
+en data/biofocus.sqlite. Nunca graba ni guarda imágenes, video ni audio: cada cuadro vive en memoria lo que
+tarda en procesarse.
 
 Uso, desde la raíz del repo:
     .venv\Scripts\python producto\monitor.py --meta "Repasar cálculo integral" --duracion 25
     .venv\Scripts\python producto\monitor.py --meta "Repasar cálculo integral" --modo-demo
     .venv\Scripts\python producto\monitor.py --meta "..." --video grabaciones\prueba.mp4   # plan B, sin cámara
+    .venv\Scripts\python producto\monitor.py --meta "..." --ocultar-camara --caida-postura 30
 
-Teclas en la ventana de la cámara: c recalibra y q termina. También termina cuando la app marca la sesión
-como terminada. En los dos casos escribe fin_sesion y cierra limpio.
+Teclas en la ventana de la cámara: c recalibra y q termina. Con la cámara oculta se recalibra y se termina
+desde la app («Recalibrar postura» y «Terminar sesión»). En todos los casos escribe fin_sesion y cierra limpio.
 """
 
 from __future__ import annotations
@@ -25,10 +27,11 @@ import sys
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
+import aviso as emergente
 import datos
 import herramientas
 import ventanas
@@ -60,6 +63,15 @@ CAIDA_ALERTA = 0.25  # alerta si el número cae más de 25 % bajo la línea base
 REARME = 0.10  # …y se rearma al volver a menos de 10 % bajo la línea base, o tras rearme_s seguidos en «bien».
 # Por qué el rearme por tiempo: el experimento 01 midió −15 % al volver a sentarse derecho. Solo con el −10 %,
 # la alerta casi nunca se rearmaba y había una sola alerta por sesión (hallazgo 7 de la auditoría).
+# Sensibilidad que la persona elige en «Ajustes» de la app (tarea I3), con sus topes y el porqué de cada uno.
+# El modo demo no la usa: sus tiempos y el 25 % son fijos para que la demo y el plan B salgan igual siempre.
+CAIDA_MIN_PCT, CAIDA_MAX_PCT = 20, 40  # volver a sentarse derecho dio −15 % (experimento 01) y por debajo de 20
+# alertaría solo; encorvarse dio −43 %, así que por encima de 40 casi nunca avisaría.
+POSTURA_MIN_S, POSTURA_MAX_S = 5, 120  # menos de 5 s es mirar el teclado; más de 2 min ya no avisa «en el momento»
+DISTRACCION_MIN_S, DISTRACCION_MAX_S = 10, 600  # menos de 10 s corta un vistazo a otra ventana; 10 min es el tope
+# para que el aviso todavía sirva
+PAUSA_MIN_MIN, PAUSA_MAX_MIN = 15, 120  # más seguido que cada 15 min interrumpe el estudio; más de 2 h sin pausa ya
+# no es una pausa activa
 SUAVIZADO_S = 0.5  # mediana de medio segundo, para que un cuadro suelto no corte la cuenta
 VISIBILIDAD_MIN = 0.5
 AVISO_S = 6  # cuánto queda el aviso grande en pantalla
@@ -100,8 +112,9 @@ def numero_postura(puntos, ancho: int, alto: int) -> float | None:
 class Postura:
     """Línea base, estado y alerta de postura. Estados: calibrando, bien, revisa, no_te_veo."""
 
-    def __init__(self, tiempos: Tiempos, inicio: float):
+    def __init__(self, tiempos: Tiempos, inicio: float, caida: float = CAIDA_ALERTA):
         self.t = tiempos
+        self.caida = caida  # fracción bajo la línea base que cuenta como «revisa» (0,25 por defecto)
         self.base: float | None = None
         self.estado = "calibrando"
         self.suavizado: float | None = None  # mediana del último medio segundo
@@ -154,7 +167,7 @@ class Postura:
         actual = statistics.median(v for _, v in self._muestras)
         self.suavizado = actual
         self.variacion = actual / self.base - 1
-        if actual < self.base * (1 - CAIDA_ALERTA):
+        if actual < self.base * (1 - self.caida):
             self.estado, self.bien_desde = "revisa", None
             if self.mal_desde is None:
                 self.mal_desde = t
@@ -244,6 +257,28 @@ class CorteCamara:
         return "esperar"
 
 
+RECORDAR_FIN_S = 10 * 60  # tras el tiempo planeado, el aviso «la cámara sigue encendida» se repite cada 10 min
+
+
+class FinDelPlan:
+    """Avisa cuando se cumple el tiempo planeado y lo repite. No termina la sesión: eso lo decide la persona.
+
+    Por qué (tarea I2): con la cámara oculta ya no hay una ventana encima que recuerde que sigue encendida, y el
+    monitor no se detiene solo al cumplirse la duración.
+    """
+
+    def __init__(self, inicio: float, duracion_min: int, cada_s: float = RECORDAR_FIN_S):
+        self.fin_plan = inicio + duracion_min * 60
+        self.cada_s = cada_s
+        self.ultimo: float | None = None
+
+    def revisar(self, t: float) -> bool:
+        if t < self.fin_plan or (self.ultimo is not None and t - self.ultimo < self.cada_s):
+            return False
+        self.ultimo = t
+        return True
+
+
 class Distraccion:
     """Alerta tras distraccion_s seguidos en no_sirve, con cooldown entre alertas."""
 
@@ -270,13 +305,30 @@ def sonar(tipo: str) -> None:
     import winsound
 
     tonos = {"postura": [(660, 160), (520, 220)], "distraccion": [(880, 140), (1175, 220)],
-             "pausa": [(523, 150), (659, 150), (784, 220)]}[tipo]
+             "pausa": [(523, 150), (659, 150), (784, 220)], "tiempo": [(784, 180), (523, 260)]}[tipo]
 
     def tocar() -> None:
         for frecuencia, ms in tonos:
             winsound.Beep(frecuencia, ms)
 
     threading.Thread(target=tocar, daemon=True).start()
+
+
+def avisar(emergentes: emergente.Emergentes | None, aviso: dict) -> None:
+    """Sonido y aviso emergente encima de todo (tarea I1): se ven aunque la ventana de la cámara esté detrás."""
+    if emergentes is None:  # --sin-ventana, para pruebas: ni sonido ni aviso
+        return
+    sonar(aviso["tipo"])
+    emergentes.mostrar(aviso["tipo"], aviso["titulo"], aviso["detalle"])
+
+
+def configuracion(args: argparse.Namespace) -> tuple[Tiempos, float]:
+    """Tiempos y caída de la sesión. La sensibilidad de «Ajustes» solo vale en el modo normal (tarea I3)."""
+    if args.modo_demo:
+        return DEMO, CAIDA_ALERTA
+    tiempos = replace(NORMAL, postura_sostenida_s=args.postura_s, distraccion_s=args.distraccion_s,
+                      pausa_cada_s=args.pausa_cada_min * 60)
+    return tiempos, args.caida_postura / 100
 
 
 COLOR_CATEGORIA = {  # RGB
@@ -481,6 +533,15 @@ class Registro:
         ).fetchone()
         return fila is None or bool(fila["detener"]) or fila["fin"] is not None
 
+    def pidio_recalibrar(self) -> bool:
+        """True si la app pidió recalibrar con su botón (tarea I2). Deja la marca en 0 para no repetirlo."""
+        fila = self.con.execute("SELECT recalibrar FROM estado_monitor WHERE sesion_id = ?", (self.id,)).fetchone()
+        if fila is None or not fila["recalibrar"]:
+            return False
+        self.con.execute("UPDATE estado_monitor SET recalibrar = 0 WHERE sesion_id = ?", (self.id,))
+        self.con.commit()
+        return True
+
     def cerrar(self, t: float, motivo: str) -> None:
         vivo.cerrar_sesion(self.con, self.id, datetime.fromtimestamp(t), motivo)
         self.con.commit()
@@ -501,7 +562,7 @@ def correr(args: argparse.Namespace) -> int:
     from mediapipe.tasks.python import BaseOptions, vision
 
     verificar_modelo()
-    tiempos = DEMO if args.modo_demo else NORMAL
+    tiempos, caida = configuracion(args)
     if args.video:
         ruta_video = Path(args.video)
         if not ruta_video.is_file():
@@ -527,15 +588,20 @@ def correr(args: argparse.Namespace) -> int:
         fuente.release()
         raise
     print(f"Sesión {registro.id} iniciada{' en modo demo' if args.modo_demo else ''}. "
-          f"{'Video: ' + str(args.video) if args.video else 'Cámara ' + str(args.camara)}. q termina, c recalibra.", flush=True)
+          f"{'Video: ' + str(args.video) if args.video else 'Cámara ' + str(args.camara)}"
+          f"{' oculta' if args.ocultar_camara else ''}. q termina, c recalibra.", flush=True)
+    print(f"Sensibilidad: caída {caida * 100:.0f} % durante {tiempos.postura_sostenida_s:.0f} s, "
+          f"distracción {tiempos.distraccion_s:.0f} s, pausa cada {tiempos.pausa_cada_s / 60:.1f} min.", flush=True)
 
     clasificador = ventanas.Clasificador(args.meta)
     hilo = ventanas.HiloVentanas(ventanas.SeguidorVentanas(clasificador))
     hilo.start()
-    postura = Postura(tiempos, time.time())
+    postura = Postura(tiempos, time.time(), caida)
     distraccion = Distraccion(tiempos)
     pausas = Pausas(tiempos, time.time())
-    pantalla = None if args.sin_ventana else Pantalla()
+    fin_del_plan = FinDelPlan(registro.inicio, args.duracion)
+    emergentes = None if args.sin_ventana else emergente.Emergentes()
+    pantalla = None if args.sin_ventana or args.ocultar_camara else Pantalla()
     if pantalla:
         cv2.namedWindow(TITULO_VENTANA, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(TITULO_VENTANA, 800, 600)
@@ -601,8 +667,7 @@ def correr(args: argparse.Namespace) -> int:
                          "titulo": "Revisa tu postura",
                          "detalle": f"Tu cabeza bajó {abs(pct):.0f} % frente a tu línea base"}
                 print(f"ALERTA postura a los {t - registro.inicio:.1f} s ({pct:+.0f} %)", flush=True)
-                if pantalla:
-                    sonar("postura")
+                avisar(emergentes, aviso)
             pausa, recordar = pausas.actualizar(t, valor is not None, postura.base is not None)
             if pausa:
                 registro.pausa(*pausa)
@@ -613,8 +678,7 @@ def correr(args: argparse.Namespace) -> int:
                          "titulo": "Toma una pausa",
                          "detalle": f"{sugerida['nombre']} · {sugerida['duracion_min']} min: {sugerida['pasos'][0]}"[:75]}
                 print(f"RECORDATORIO de pausa a los {t - registro.inicio:.0f} s: {sugerida['nombre']}", flush=True)
-                if pantalla:
-                    sonar("pausa")
+                avisar(emergentes, aviso)
             if distraccion.revisar(t, foto.racha_no_sirve):
                 segundos = int(t - foto.racha_no_sirve)
                 registro.alerta("distraccion", t, app=foto.app,
@@ -623,8 +687,13 @@ def correr(args: argparse.Namespace) -> int:
                          "titulo": "¿Esto sirve a tu meta?",
                          "detalle": f"{segundos} s seguidos en {foto.app}, que no sirve"}
                 print(f"ALERTA distracción a los {t - registro.inicio:.1f} s ({foto.app})", flush=True)
-                if pantalla:
-                    sonar("distraccion")
+                avisar(emergentes, aviso)
+            if fin_del_plan.revisar(t):
+                aviso = {"tipo": "tiempo", "hasta": t + AVISO_S, "color": COLOR_POSTURA["calibrando"],
+                         "titulo": "Se cumplió tu tiempo",
+                         "detalle": f"Planeaste {args.duracion} min. La cámara sigue encendida: termina en la app."}
+                print(f"TIEMPO planeado cumplido a los {t - registro.inicio:.0f} s: la sesión sigue abierta.", flush=True)
+                avisar(emergentes, aviso)
             if aviso and t > aviso["hasta"]:
                 aviso = None
             if args.detalle and t - ultimo_detalle >= 1:
@@ -641,6 +710,10 @@ def correr(args: argparse.Namespace) -> int:
                 if registro.latido(t, postura, foto):
                     motivo = "terminada desde la app"
                     break
+                if registro.pidio_recalibrar():  # botón «Recalibrar postura» de la app (tarea I2)
+                    postura.recalibrar(t)
+                    aviso = None
+                    print(f"Recalibrando desde la app a los {t - registro.inicio:.0f} s.", flush=True)
 
             if pantalla:
                 transcurrido = t - registro.inicio
@@ -687,6 +760,19 @@ def correr(args: argparse.Namespace) -> int:
     return 0
 
 
+def _entero_entre(minimo: int, maximo: int):
+    """Tipo para argparse: un entero dentro de los topes de la sensibilidad."""
+    def convertir(texto: str) -> int:
+        try:
+            valor = int(texto)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"debe ser un número entero entre {minimo} y {maximo}") from None
+        if not minimo <= valor <= maximo:
+            raise argparse.ArgumentTypeError(f"debe estar entre {minimo} y {maximo}")
+        return valor
+    return convertir
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -698,7 +784,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--video", help="plan B: lee este video (por ejemplo de grabaciones/) en vez de la cámara")
     p.add_argument("--camara", type=int, default=0, help="índice de la cámara (por defecto 0)")
     p.add_argument("--bd", type=Path, default=None, help="base SQLite (por defecto data/biofocus.sqlite)")
-    p.add_argument("--sin-ventana", action="store_true", help="para pruebas: sin ventana ni sonido")
+    p.add_argument("--sin-ventana", action="store_true", help="para pruebas: sin ventana, sin sonido y sin avisos emergentes")
+    p.add_argument("--ocultar-camara", action="store_true",
+                   help="sin la ventana de la cámara; los avisos salen igual, emergentes y con sonido")
+    p.add_argument("--caida-postura", type=_entero_entre(CAIDA_MIN_PCT, CAIDA_MAX_PCT), default=round(CAIDA_ALERTA * 100),
+                   help=f"%% bajo tu línea base que cuenta como mala postura ({CAIDA_MIN_PCT} a {CAIDA_MAX_PCT}; no aplica en modo demo)")
+    p.add_argument("--postura-s", type=_entero_entre(POSTURA_MIN_S, POSTURA_MAX_S), default=int(NORMAL.postura_sostenida_s),
+                   help=f"segundos de mala postura antes de avisar ({POSTURA_MIN_S} a {POSTURA_MAX_S})")
+    p.add_argument("--distraccion-s", type=_entero_entre(DISTRACCION_MIN_S, DISTRACCION_MAX_S), default=int(NORMAL.distraccion_s),
+                   help=f"segundos seguidos en algo que no sirve antes de avisar ({DISTRACCION_MIN_S} a {DISTRACCION_MAX_S})")
+    p.add_argument("--pausa-cada-min", type=_entero_entre(PAUSA_MIN_MIN, PAUSA_MAX_MIN), default=int(NORMAL.pausa_cada_s // 60),
+                   help=f"minutos sin pausa antes de recordarla ({PAUSA_MIN_MIN} a {PAUSA_MAX_MIN})")
     p.add_argument("--detalle", action="store_true", help="imprime cada segundo el número de postura, la base y el estado")
     args = p.parse_args(argv)
     args.meta = " ".join(args.meta.split())[:200]

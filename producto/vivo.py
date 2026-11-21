@@ -7,7 +7,7 @@ resumen(..., con_meta=True), que usa la app en pantalla; la herramienta del coac
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import datos
 
@@ -101,6 +101,12 @@ def cerrar_huerfanas(con: sqlite3.Connection, ahora: datetime) -> int:
 
 def pedir_detener(con: sqlite3.Connection, sesion_id: int) -> None:
     con.execute("UPDATE estado_monitor SET detener = 1 WHERE sesion_id = ?", (sesion_id,))
+    con.commit()
+
+
+def pedir_recalibrar(con: sqlite3.Connection, sesion_id: int) -> None:
+    """El botón «Recalibrar postura» de la app: el monitor lo lee en su próximo latido (tarea I2)."""
+    con.execute("UPDATE estado_monitor SET recalibrar = 1 WHERE sesion_id = ?", (sesion_id,))
     con.commit()
 
 
@@ -213,6 +219,56 @@ def totales_reales(con: sqlite3.Connection, desde: datetime) -> dict:
         "alertas_distraccion": conteo["alerta_distraccion"],
         "pausas": conteo["pausa"],
     }
+
+
+MAX_FILAS_REGISTROS = 500  # «Mis registros» lista hasta 500 sesiones: un año de uso diario con margen
+
+
+def registros(con: sqlite3.Connection, es_demo: bool, desde: date, hasta: date) -> dict:
+    """Lo de «Mis registros» (tarea I4): las sesiones de un origen entre dos fechas (inclusive), sus minutos por
+    categoría y las alertas por día. Reales y demo nunca se mezclan."""
+    rango = (1 if es_demo else 0, f"{desde:%Y-%m-%d} 00:00:00", f"{hasta + timedelta(days=1):%Y-%m-%d} 00:00:00")
+    filtro = "s.es_demo = ? AND s.inicio >= ? AND s.inicio < ?"
+    filas = con.execute(
+        "SELECT s.id, s.inicio, s.fin, s.meta, s.duracion_planeada_min, "
+        "SUM(e.tipo = 'alerta_postura') AS postura, SUM(e.tipo = 'alerta_distraccion') AS distraccion, "
+        "SUM(e.tipo = 'pausa') AS pausas, "
+        "COALESCE(SUM(CASE WHEN e.tipo = 'ventana' AND e.categoria = 'no_sirve' THEN e.duracion_s END), 0) AS no_sirve_s "
+        f"FROM sesiones s LEFT JOIN eventos e ON e.sesion_id = s.id WHERE {filtro} "
+        "GROUP BY s.id ORDER BY s.inicio DESC, s.id DESC LIMIT ?",
+        (*rango, MAX_FILAS_REGISTROS),
+    ).fetchall()
+    sesiones = [
+        {
+            "id": f["id"],
+            "inicio": f["inicio"],
+            "meta": f["meta"],
+            "minutos": round((_dt(f["fin"]) - _dt(f["inicio"])).total_seconds() / 60, 1) if f["fin"] else None,
+            "plan_min": f["duracion_planeada_min"],
+            "alertas_postura": f["postura"] or 0,
+            "alertas_distraccion": f["distraccion"] or 0,
+            "pausas": f["pausas"] or 0,
+            "min_no_sirve": round(f["no_sirve_s"] / 60, 1),
+            "estado": "terminada" if f["fin"] else "abierta",
+        }
+        for f in filas
+    ]
+    minutos = {c: 0.0 for c in datos.CATEGORIAS}
+    for f in con.execute(
+        "SELECT e.categoria, COALESCE(SUM(e.duracion_s), 0) AS s FROM eventos e JOIN sesiones s ON s.id = e.sesion_id "
+        f"WHERE e.tipo = 'ventana' AND {filtro} GROUP BY e.categoria",
+        rango,
+    ):
+        minutos[f["categoria"]] = round(f["s"] / 60, 1)
+    por_dia = [
+        {"dia": f["dia"], "tipo": f["tipo"].removeprefix("alerta_"), "n": f["n"]}
+        for f in con.execute(
+            "SELECT substr(e.ts, 1, 10) AS dia, e.tipo, COUNT(*) AS n FROM eventos e JOIN sesiones s ON s.id = e.sesion_id "
+            f"WHERE e.tipo IN ('alerta_postura', 'alerta_distraccion') AND {filtro} GROUP BY dia, e.tipo ORDER BY dia",
+            rango,
+        )
+    ]
+    return {"sesiones": sesiones, "minutos": minutos, "por_dia": por_dia}
 
 
 def sesiones_reales(con: sqlite3.Connection, limite: int = 10) -> list[dict]:
