@@ -1,6 +1,6 @@
 # Plan · Momento 3 · Responder por lo construido
 
-Presentación en vivo: 2026-11-19. Rúbrica: producto 25, seguridad 20, gobernanza 20, medición 15, sustentación 20.
+Presentación en vivo: 2026-11-21; la entrega en el repositorio cerró el 2026-11-20. Las fechas «antes del 19» de este plan son las del plan original. Rúbrica: producto 25, seguridad 20, gobernanza 20, medición 15, sustentación 20.
 Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repositorio leído; hallazgos al final), de la propuesta inicial y de las respuestas del 2026-11-17.
 
 **Aprobación**
@@ -12,7 +12,7 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
 - I (lo que salió de la prueba con el padre del autor): bloque nuevo, aprobado el 2026-11-20 («hagamos mejoras a las visuales: barra de pestañas, mejor accesibilidad, que el panel se esconda y calibrar a gusto desde el panel principal»).
 - Decisiones menores en `docs/decisiones/m3-decisiones.md`.
 
-## Estado al 2026-11-20
+## Estado al 2026-11-21
 | Tarea | Estado | Commit |
 |---|---|---|
 | A1 a A5 | Hecho | `169bad9` |
@@ -20,15 +20,15 @@ Sale de la rúbrica del Momento 3, de la auditoría del 2026-11-11 (todo el repo
 | D1, D2 y D3 | Hecho; la respuesta a la auditoría se actualiza con cada bloque | `6b1166e` y siguientes |
 | B1 a B4 y B8 | Hecho | `71dcf42` |
 | B6 y B7 | Hecho | `5249a55` |
-| B5 | **No se hace**: asumido en `docs/respuesta_auditoria.md`, hallazgo 13 | — |
+| B5 | **No se hizo como estaba escrito.** Su objetivo (que la ventana no tape el trabajo y los avisos lleguen) lo cubren I1 e I2: la cámara trabaja oculta y cada alerta sale en un aviso emergente encima de todo. No se midió una hora seguida de trabajo. `docs/respuesta_auditoria.md`, hallazgo 13 | `462d42b` |
 | E1 y E2 | Hecho: `docs/decisiones/semana14.md` | `a1a0366` (medido) y `eb9c745` |
-| F1 a F5 | Hecho. F2 es la plantilla: falta la prueba con la persona ajena | `6b1166e`, `0e4656e` y `9c6b02a` |
-| G1 | Hecho el 2026-11-20: no cumple el criterio (0,9 a 1,0 veces el ruido en el cuello) | este commit |
+| F1 a F5 | Hecho. F2: la prueba con el padre del autor se hizo el 2026-11-20 (`docs/decisiones/prueba-companero-2026-11-20.md`); lo logró en parte y lo que falló se arregló en el bloque I. Falta repetirla con la app nueva | `6b1166e`, `0e4656e`, `9c6b02a` y `462d42b` |
+| G1 | Hecho el 2026-11-20: no cumple el criterio (0,9 a 1,0 veces el ruido en el cuello) | `a7cc9b8` |
 | G2 | Renegociado en `docs/SPEC.md` | — |
 | H1 | Hecho: qwen2.5:3b para el clasificador y el coach | `e1546ae` |
 | H2 y H3 | Hecho: 34/36 en local (`docs/decisiones/semana14.md`); el plan B es el modo local | `2026-11-18_0426.json` |
-| I1 a I4 | Hecho el 2026-11-20: aviso emergente, cámara oculta, recalibrar y sensibilidad desde la app, pestañas y «Mis registros». Verificado con `encorvado.mp4`, una base temporal y la vista previa | «Momento 3, bloque I» |
-| I5 | Hecho: SPEC, seguridad, gobernanza, auditoría, guion, prueba, README y `docs/ENTREGA.md` | «Momento 3, bloque I» |
+| I1 a I4 | Hecho el 2026-11-20: aviso emergente, cámara oculta, recalibrar y sensibilidad desde la app, pestañas y «Mis registros». Verificado con `encorvado.mp4`, una base temporal y la vista previa | `462d42b` |
+| I5 | Hecho: SPEC, seguridad, gobernanza, auditoría, guion, prueba, README y `docs/ENTREGA.md` | `462d42b` |
 
 ## Respuestas del 2026-11-17
 1. **Equipo:** trabajo individual, avalado por el docente como excepción por incapacidad. Queda constancia en `docs/SPEC.md`. La sustentación se prepara para una sola persona.

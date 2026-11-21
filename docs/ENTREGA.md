@@ -2,7 +2,7 @@
 
 Índice para quien evalúa: cada entregable y cada criterio de la rúbrica llevan a su archivo y a la evidencia que lo respalda. El repositorio es la evidencia y la sustentación es la evaluación. El guion de la presentación está en `docs/sustentacion.md`.
 
-Fecha: 2026-11-20. Trabajo individual, con aval del docente como excepción (`docs/SPEC.md`, encabezado).
+Entrega: 2026-11-20. Presentación en vivo: 2026-11-21. Lo que se cambie después de la entrega queda en la historia de git con su fecha. Trabajo individual, con aval del docente como excepción (`docs/SPEC.md`, encabezado).
 
 ## Entregables
 | Entregable | Formato | Dónde | Qué mirar primero |
@@ -35,8 +35,8 @@ Fecha: 2026-11-20. Trabajo individual, con aval del docente como excepción (`do
 | Ficha de gobernanza escrita la noche anterior, sin relación con el sistema real | Cada respuesta cita `archivo.py:línea`. `.claude/skills/cerrar-tarea/verificar_citas.py` revisa todas las citas en cada commit. La ficha es del 2026-11-17 y se revisó con cada cambio (historia de git) |
 | No haber corrido la prueba de inyección contra el propio agente | Corridas reales contra el proveedor, 3 por ataque, antes y después del arreglo, con sus JSON en `producto/evals/resultados/` |
 | Cifras finales sin comparar contra la línea base | `semana14.md` compara las cuatro cifras con `semana10.md`, con el mismo método, y reporta el modo local aparte |
-| Esconder los fallos en vez de explicarlos | Están escritos: el ataque que funcionó 3/3 antes del arreglo; 3 de 5 títulos nuevos engañan al clasificador (se asume, `seguridad.md`); el experimento 02 de la cámara lateral no cumplió (`experimento-02.md`); la prueba con una persona ajena falló en las alertas; la auditoría cruzada no se hizo (`respuesta_auditoria.md`); el modo discreto B5 quedó cubierto recién con el bloque I |
+| Esconder los fallos en vez de explicarlos | Están escritos: el ataque que funcionó 3/3 antes del arreglo; 3 de 5 títulos nuevos engañan al clasificador (se asume, `seguridad.md`); el experimento 02 de la cámara lateral no cumplió (`experimento-02.md`); la prueba con una persona ajena falló en las alertas; la auditoría cruzada no se hizo (`respuesta_auditoria.md`); el modo discreto (B5) no se hizo como estaba planeado, y su objetivo lo cubrió el bloque I solo después de que esa prueba mostró que nadie veía las alertas (`PLAN-M3.md`, fila B5) |
 
 ## Lo que falta antes de presentar
 - Repetir la prueba con una persona ajena con la app nueva (es el ensayo de la demo).
-- La noche anterior: los pasos de «Antes de entrar» en `docs/sustentacion.md`.
+- Antes de entrar: los pasos de «Antes de entrar» en `docs/sustentacion.md`.

@@ -1,6 +1,6 @@
 # Sustentación · guion de la final y preguntas
 
-Presentación: 2026-11-19, en vivo, con el orden sorteado el mismo día. La hace una sola persona (trabajo individual con aval del docente, `docs/SPEC.md`). El guion sigue el orden de la semana 13 y dura unos 15 minutos.
+Presentación: 2026-11-21, en vivo, con el orden sorteado el mismo día. La hace una sola persona (trabajo individual con aval del docente, `docs/SPEC.md`). El guion sigue el orden de la semana 13 y dura unos 15 minutos.
 
 ## Antes de entrar (la noche anterior y 10 minutos antes)
 1. Datos demo con la fecha de la presentación: `.venv\Scripts\python producto\generar_datos_demo.py`. Genera los 7 días que terminan ayer; así «esta semana» tiene datos.
